@@ -1,0 +1,108 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String?
+  role      String   @default("admin")
+  createdAt DateTime @default(now())
+}
+
+model Listing {
+  id          String   @id @default(cuid())
+  title       String
+  slug        String   @unique
+  description String
+  type        String
+  bedrooms    Int
+  bathrooms   Int
+  maxGuests   Int
+  pricePerNight Float
+  cleaningFee   Float  @default(0)
+  amenities   String[]
+  photos      String[]
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  closedDates  ClosedDate[]
+  reservations Reservation[]
+  galleryItems ListingMedia[]
+}
+
+model Media {
+  id           String   @id @default(cuid())
+  filename     String
+  originalName String
+  url          String
+  mimeType     String
+  size         Int
+  createdAt    DateTime @default(now())
+
+  listingMedia ListingMedia[]
+  pageMedia    PageMedia[]
+}
+
+model ListingMedia {
+  id        String  @id @default(cuid())
+  listingId String
+  listing   Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  mediaId   String
+  media     Media   @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  room      String
+  label     String
+  sortOrder Int     @default(0)
+
+  @@index([listingId])
+}
+
+model PageMedia {
+  id       String @id @default(cuid())
+  location String @unique
+  mediaId  String
+  media    Media  @relation(fields: [mediaId], references: [id])
+}
+
+model SiteContent {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  section   String
+  label     String
+  updatedAt DateTime @updatedAt
+}
+
+model ClosedDate {
+  id        String   @id @default(cuid())
+  date      DateTime
+  reason    String?
+  listingId String
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([listingId, date])
+}
+
+model Reservation {
+  id            String   @id @default(cuid())
+  guestName     String
+  guestEmail    String
+  guestPhone    String?
+  checkIn       DateTime
+  checkOut      DateTime
+  guests        Int
+  totalPrice    Float
+  status        String   @default("pending")
+  notes         String?
+  listingId     String
+  listing       Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}

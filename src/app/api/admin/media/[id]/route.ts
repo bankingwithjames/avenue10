@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/adminAuth";
 import { prisma } from "@/lib/prisma";
-import { unlink } from "fs/promises";
-import path from "path";
+import { supabase, STORAGE_BUCKET } from "@/lib/supabase";
 
 export async function DELETE(
   _req: NextRequest,
@@ -17,11 +16,12 @@ export async function DELETE(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // Remove file from disk if it's in uploads
-  if (media.url.startsWith("/uploads/")) {
-    try {
-      await unlink(path.join(process.cwd(), "public", media.url));
-    } catch {}
+  // Remove from Supabase Storage if it's a Supabase URL
+  if (media.url.includes("supabase.co/storage")) {
+    const match = media.url.match(/\/object\/public\/media\/(.+)$/);
+    if (match) {
+      await supabase.storage.from(STORAGE_BUCKET).remove([match[1]]);
+    }
   }
 
   await prisma.media.delete({ where: { id } });

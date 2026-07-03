@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/adminAuth";
 import { prisma } from "@/lib/prisma";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
+import { supabase, STORAGE_BUCKET } from "@/lib/supabase";
 
 export async function GET() {
   const { error } = await requireAdmin();
@@ -30,24 +29,36 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No files provided" }, { status: 400 });
   }
 
-  const uploadDir = path.join(process.cwd(), "public", "uploads");
-  await mkdir(uploadDir, { recursive: true });
-
   const results = [];
 
   for (const file of files) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
-    const ext = path.extname(file.name) || ".jpg";
-    const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
+    const ext = file.name.split(".").pop() || "jpg";
+    const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const storagePath = `uploads/${filename}`;
 
-    await writeFile(path.join(uploadDir, filename), buffer);
+    const { error: uploadError } = await supabase.storage
+      .from(STORAGE_BUCKET)
+      .upload(storagePath, buffer, {
+        contentType: file.type || "application/octet-stream",
+        upsert: false,
+      });
+
+    if (uploadError) {
+      console.error("Upload error:", uploadError.message);
+      continue;
+    }
+
+    const { data: urlData } = supabase.storage
+      .from(STORAGE_BUCKET)
+      .getPublicUrl(storagePath);
 
     const media = await prisma.media.create({
       data: {
         filename,
         originalName: file.name,
-        url: `/uploads/${filename}`,
+        url: urlData.publicUrl,
         mimeType: file.type || "application/octet-stream",
         size: file.size,
       },

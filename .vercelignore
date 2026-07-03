@@ -1,0 +1,8 @@
+.env
+.env.local
+.env.production
+docker-compose.yml
+prisma/cleanup.ts
+prisma/seed.ts
+prisma/seed-content.ts
+prisma/seed-footer.ts

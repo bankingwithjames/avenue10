@@ -29,6 +29,9 @@ export function Navbar({ variant = "dark" }: { variant?: "dark" | "light" }) {
             <Link href="/listings" className={`${hoverClass} transition-colors`}>
               Rooms
             </Link>
+            <Link href="/reservations" className={`${hoverClass} transition-colors`}>
+              Availability
+            </Link>
             <a href="/#services" className={`${hoverClass} transition-colors`}>
               Amenities
             </a>
@@ -73,6 +76,9 @@ export function Navbar({ variant = "dark" }: { variant?: "dark" | "light" }) {
           </Link>
           <Link href="/listings" className="block py-2" onClick={() => setMenuOpen(false)}>
             Rooms
+          </Link>
+          <Link href="/reservations" className="block py-2" onClick={() => setMenuOpen(false)}>
+            Availability
           </Link>
           <a href="/#services" className="block py-2" onClick={() => setMenuOpen(false)}>
             Amenities

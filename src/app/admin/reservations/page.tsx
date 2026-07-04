@@ -15,6 +15,7 @@ interface Reservation {
   status: string;
   notes: string | null;
   createdAt: string;
+  accessCode: string | null;
   listing: { title: string; slug: string };
 }
 
@@ -98,6 +99,11 @@ export default function AdminReservationsPage() {
                   <p className="text-xs text-warm-gray">
                     {r.guestEmail}{r.guestPhone && ` | ${r.guestPhone}`}
                   </p>
+                  {r.accessCode && (
+                    <p className="text-xs text-warm-gray">
+                      Check-In Code: <span className="font-mono font-medium text-charcoal bg-cream px-1.5 py-0.5">{r.accessCode}</span>
+                    </p>
+                  )}
                   {r.notes && <p className="text-xs text-warm-gray italic">Note: {r.notes}</p>}
                   <p className="text-xs font-medium text-charcoal">Total: ${r.totalPrice}</p>
                 </div>

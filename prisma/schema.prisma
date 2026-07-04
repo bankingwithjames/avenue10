@@ -105,4 +105,65 @@ model Reservation {
   listing       Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  accessCode    String?
+  agreement     ReservationAgreement?
+  guestRequests GuestRequest[]
+}
+
+model ReservationAgreement {
+  id            String      @id @default(cuid())
+  reservationId String      @unique
+  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  signedName    String
+  signedAt      DateTime    @default(now())
+  ipAddress     String?
+  documentHash  String
+}
+
+model InventoryItem {
+  id        String @id @default(cuid())
+  listingId String
+  room      String
+  itemName  String
+  quantity  Int    @default(1)
+  sortOrder Int    @default(0)
+
+  @@index([listingId])
+}
+
+model CheckinInstruction {
+  id        String @id @default(cuid())
+  listingId String
+  category  String
+  title     String
+  value     String
+  sortOrder Int    @default(0)
+
+  @@index([listingId])
+}
+
+model LocalRecommendation {
+  id          String  @id @default(cuid())
+  category    String
+  name        String
+  description String
+  address     String?
+  link        String?
+  imageUrl    String?
+  sortOrder   Int     @default(0)
+}
+
+model GuestRequest {
+  id            String      @id @default(cuid())
+  reservationId String
+  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  type          String
+  message       String
+  status        String      @default("pending")
+  adminReply    String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([reservationId])
 }

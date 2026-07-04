@@ -12,6 +12,7 @@ import {
   LogOut,
   Image as ImageIcon,
   FileText,
+  DoorOpen,
 } from "lucide-react";
 
 const navItems = [
@@ -21,6 +22,7 @@ const navItems = [
   { href: "/admin/availability", label: "Availability", icon: Calendar },
   { href: "/admin/media", label: "Media Library", icon: ImageIcon },
   { href: "/admin/content", label: "Pages & Content", icon: FileText },
+  { href: "/admin/checkin", label: "Check-In Portal", icon: DoorOpen },
 ];
 
 export default function AdminLayout({

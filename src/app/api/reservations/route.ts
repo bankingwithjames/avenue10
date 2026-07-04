@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { randomBytes } from "crypto";
+
+function generateAccessCode(): string {
+  return "AV10-" + randomBytes(3).toString("hex").toUpperCase();
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -67,6 +72,7 @@ export async function POST(req: NextRequest) {
         notes: notes || null,
         totalPrice,
         status: "pending",
+        accessCode: generateAccessCode(),
       },
     });
 

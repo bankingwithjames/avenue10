@@ -35,6 +35,9 @@ export function Navbar({ variant = "dark" }: { variant?: "dark" | "light" }) {
             <a href="/#contact" className={`${hoverClass} transition-colors`}>
               Contact
             </a>
+            <Link href="/checkin" className={`${hoverClass} transition-colors`}>
+              Check In
+            </Link>
             {session ? (
               <>
                 <Link href="/admin" className={`${hoverClass} transition-colors`}>
@@ -77,6 +80,9 @@ export function Navbar({ variant = "dark" }: { variant?: "dark" | "light" }) {
           <a href="/#contact" className="block py-2" onClick={() => setMenuOpen(false)}>
             Contact
           </a>
+          <Link href="/checkin" className="block py-2" onClick={() => setMenuOpen(false)}>
+            Check In
+          </Link>
           {session ? (
             <>
               <Link href="/admin" className="block py-2" onClick={() => setMenuOpen(false)}>

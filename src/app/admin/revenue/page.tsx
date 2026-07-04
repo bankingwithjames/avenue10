@@ -265,7 +265,11 @@ function KPICard({ label, value, sub, icon: Icon, accent = "text-charcoal" }: {
 
 // ─── Tab Content Components ─────────────────────────────────────────────────
 
-function OverviewTab() {
+function OverviewTab({ listings }: { listings: Listing[] }) {
+  const avgRate = listings.length > 0
+    ? Math.round(listings.reduce((sum, l) => sum + l.pricePerNight, 0) / listings.length)
+    : 0;
+
   return (
     <div className="space-y-6">
       {/* KPI Grid */}
@@ -274,7 +278,7 @@ function OverviewTab() {
         <KPICard icon={DollarSign} label="Net Revenue" value="$10,890" sub="After platform fees" accent="text-emerald-600" />
         <KPICard icon={TrendingUp} label="Net Profit" value="$7,230" sub="After all expenses" accent="text-accent" />
         <KPICard icon={Percent} label="Occupancy" value="68%" sub="This month" accent="text-blue-600" />
-        <KPICard icon={BarChart3} label="ADR" value="$185" sub="Avg Daily Rate" accent="text-purple-600" />
+        <KPICard icon={BarChart3} label="ADR" value={avgRate > 0 ? `$${avgRate}` : "—"} sub="Avg Daily Rate" accent="text-purple-600" />
         <KPICard icon={Target} label="RevPAR" value="$126" sub="Rev per available room" accent="text-indigo-600" />
         <KPICard icon={Wallet} label="Upcoming Payouts" value="$3,200" sub="Next 7 days" accent="text-charcoal" />
         <KPICard icon={Clock} label="Pending Payouts" value="$1,850" sub="Awaiting processing" accent="text-amber-600" />
@@ -574,15 +578,58 @@ function BookingSourcesTab() {
   );
 }
 
-function DynamicPricingTab() {
-  const today = new Date(2026, 6, 4); // Jul 4, 2026
+function DynamicPricingTab({ listings, selectedListing, onListingsUpdate }: {
+  listings: Listing[];
+  selectedListing: string;
+  onListingsUpdate: () => void;
+}) {
+  const activeListing = selectedListing === "all" ? listings[0] : listings.find((l) => l.id === selectedListing);
+  const currentBaseRate = activeListing?.pricePerNight ?? 0;
+  const [editRate, setEditRate] = useState<string>(String(currentBaseRate));
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    setEditRate(String(currentBaseRate));
+    setSaveMsg(null);
+  }, [currentBaseRate, selectedListing]);
+
+  async function handleSaveRate() {
+    if (!activeListing) return;
+    const newRate = parseFloat(editRate);
+    if (isNaN(newRate) || newRate <= 0) {
+      setSaveMsg("Enter a valid rate.");
+      return;
+    }
+    setSaving(true);
+    setSaveMsg(null);
+    try {
+      const res = await fetch(`/api/admin/listings/${activeListing.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pricePerNight: newRate }),
+      });
+      if (res.ok) {
+        setSaveMsg("Rate updated — now live on website, calendar, and booking pages.");
+        onListingsUpdate();
+      } else {
+        setSaveMsg("Failed to update rate.");
+      }
+    } catch {
+      setSaveMsg("Network error.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const today = new Date(2026, 6, 4);
   const days = Array.from({ length: 30 }, (_, i) => {
     const d = new Date(today);
     d.setDate(d.getDate() + i);
     const dayName = d.toLocaleDateString("en-US", { weekday: "short" });
     const isWeekend = d.getDay() === 0 || d.getDay() === 5 || d.getDay() === 6;
-    const baseRate = 185;
-    const currentRate = isWeekend ? Math.round(baseRate * 1.2) : baseRate;
+    const rate = currentBaseRate || 185;
+    const currentRate = isWeekend ? Math.round(rate * 1.2) : rate;
     const suggested = currentRate + Math.round((Math.random() - 0.3) * 30);
     const occupied = Math.random() > 0.32;
     return {
@@ -595,7 +642,6 @@ function DynamicPricingTab() {
   });
 
   const pricingSettings = [
-    { label: "Base Rate", value: "$185" },
     { label: "Min Rate", value: "$120" },
     { label: "Max Rate", value: "$350" },
     { label: "Weekend Premium", value: "20%" },
@@ -668,30 +714,74 @@ function DynamicPricingTab() {
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Settings Panel */}
         <Card>
-          <div className="flex items-center justify-between mb-4">
-            <SectionLabel>Pricing Settings</SectionLabel>
-            <ComingSoonBadge />
-          </div>
-          <div className="space-y-3">
-            {pricingSettings.map((s) => (
-              <div key={s.label} className="flex items-center justify-between">
-                <span className="text-xs text-charcoal">{s.label}</span>
+          <SectionLabel>Base Nightly Rate</SectionLabel>
+          {activeListing ? (
+            <div className="space-y-3">
+              <p className="text-[10px] text-warm-gray">
+                Setting the rate for <span className="font-medium text-charcoal">{activeListing.title}</span>. This updates the price shown on listings, booking forms, and the calendar.
+              </p>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-charcoal">$</span>
                 <input
-                  type="text"
-                  value={s.value}
-                  disabled
-                  className="w-24 text-right text-xs bg-cream border border-light-gray px-2 py-1.5 text-warm-gray cursor-not-allowed"
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={editRate}
+                  onChange={(e) => setEditRate(e.target.value)}
+                  className="w-28 text-right text-sm bg-white border border-light-gray px-3 py-2 text-charcoal focus:border-charcoal/50 outline-none transition"
                 />
+                <span className="text-xs text-warm-gray">/ night</span>
+                <button
+                  onClick={handleSaveRate}
+                  disabled={saving || editRate === String(currentBaseRate)}
+                  className="px-4 py-2 bg-charcoal text-white text-[10px] tracking-[0.1em] uppercase font-medium hover:bg-charcoal/90 transition disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  {saving ? "Saving..." : "Update Rate"}
+                </button>
               </div>
-            ))}
+              {saveMsg && (
+                <p className={`text-[10px] ${saveMsg.includes("live") ? "text-emerald-600" : "text-red-500"}`}>
+                  {saveMsg}
+                </p>
+              )}
+              <div className="pt-2 border-t border-light-gray mt-3">
+                <p className="text-[10px] text-warm-gray">
+                  Current live rate: <span className="font-medium text-charcoal">${currentBaseRate}/night</span>
+                  &nbsp;&middot;&nbsp; Displayed on website, calendar, and booking widget
+                </p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-warm-gray">Select a property above to set pricing.</p>
+          )}
+
+          <div className="mt-5">
+            <div className="flex items-center justify-between mb-3">
+              <SectionLabel>Additional Pricing Rules</SectionLabel>
+              <ComingSoonBadge />
+            </div>
+            <div className="space-y-3">
+              {pricingSettings.map((s) => (
+                <div key={s.label} className="flex items-center justify-between">
+                  <span className="text-xs text-charcoal">{s.label}</span>
+                  <input
+                    type="text"
+                    value={s.value}
+                    disabled
+                    className="w-24 text-right text-xs bg-cream border border-light-gray px-2 py-1.5 text-warm-gray cursor-not-allowed"
+                  />
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => alert("Connect a pricing tool like PriceLabs or Wheelhouse from the Integrations tab to enable editing.")}
+              className="mt-3 w-full flex items-center justify-center gap-1.5 bg-cream border border-light-gray px-4 py-2 text-[10px] tracking-[0.1em] uppercase font-medium text-warm-gray hover:text-charcoal hover:border-charcoal/30 transition"
+            >
+              <Plug size={10} />
+              Connect a pricing tool to enable
+            </button>
           </div>
-          <button
-            onClick={() => alert("Connect a pricing tool like PriceLabs or Wheelhouse from the Integrations tab to enable editing.")}
-            className="mt-3 w-full flex items-center justify-center gap-1.5 bg-cream border border-light-gray px-4 py-2 text-[10px] tracking-[0.1em] uppercase font-medium text-warm-gray hover:text-charcoal hover:border-charcoal/30 transition"
-          >
-            <Plug size={10} />
-            Connect a pricing tool to enable
-          </button>
+
           <div className="mt-4">
             <SectionLabel>Minimum Stay Rules</SectionLabel>
             <div className="space-y-2">
@@ -2064,11 +2154,15 @@ function AdminRevenuePageInner() {
   const [listings, setListings] = useState<Listing[]>([]);
   const [selectedListing, setSelectedListing] = useState<string>("all");
 
-  useEffect(() => {
+  function refreshListings() {
     fetch("/api/admin/listings")
       .then((r) => r.json())
       .then((data: Listing[]) => setListings(data))
       .catch(() => {});
+  }
+
+  useEffect(() => {
+    refreshListings();
   }, []);
 
   return (
@@ -2144,10 +2238,10 @@ function AdminRevenuePageInner() {
       </div>
 
       {/* Tab Content */}
-      {activeTab === "overview" && <OverviewTab />}
+      {activeTab === "overview" && <OverviewTab listings={listings} />}
       {activeTab === "charts" && <RevenueChartsTab />}
       {activeTab === "sources" && <BookingSourcesTab />}
-      {activeTab === "pricing" && <DynamicPricingTab />}
+      {activeTab === "pricing" && <DynamicPricingTab listings={listings} selectedListing={selectedListing} onListingsUpdate={refreshListings} />}
       {activeTab === "ai" && <AIPricingTab />}
       {activeTab === "comps" && <MarketCompsTab />}
       {activeTab === "payouts" && <PayoutsTab />}

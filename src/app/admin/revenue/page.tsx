@@ -1054,100 +1054,631 @@ function PayoutsTab() {
 }
 
 function ExpensesPLTab() {
-  const totalExpenses = EXPENSE_CATEGORIES.reduce((s, e) => s + e.amount, 0);
-  const grossRevenue = 12450;
-  const platformFees = 485;
-  const netRevenue = grossRevenue - platformFees;
-  const netProfit = netRevenue - totalExpenses;
+  const [subTab, setSubTab] = useState("overview");
+  const [expandedBooking, setExpandedBooking] = useState<number>(0);
 
-  const threeMonthExpenses = [
-    { month: "May", total: 3950 },
-    { month: "Jun", total: 4080 },
-    { month: "Jul", total: totalExpenses },
+  const subTabs = [
+    { id: "overview", label: "Overview" },
+    { id: "all-expenses", label: "All Expenses" },
+    { id: "booking-costs", label: "Booking Costs" },
+    { id: "recurring-bills", label: "Recurring Bills" },
+    { id: "inventory", label: "Inventory" },
+    { id: "inventory-usage", label: "Inventory Usage" },
+    { id: "replacement-reserve", label: "Replacement Reserve" },
+    { id: "weekly-summary", label: "Weekly Summary" },
+    { id: "monthly-pl", label: "Monthly P&L" },
+    { id: "reports", label: "Reports" },
   ];
-  const maxExp = Math.max(...threeMonthExpenses.map((m) => m.total));
 
   return (
     <div className="space-y-6">
-      {/* Expense Grid */}
-      <Card>
-        <SectionLabel>Monthly Expense Breakdown</SectionLabel>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          {EXPENSE_CATEGORIES.map((e) => (
-            <div key={e.name} className="flex items-center justify-between py-2 px-3 bg-cream border border-light-gray">
-              <div className="flex items-center gap-2">
-                <span className="text-sm">{e.icon}</span>
-                <span className="text-[10px] text-charcoal">{e.name}</span>
-              </div>
-              <span className={`text-xs font-medium ${e.amount === 0 ? "text-warm-gray" : "text-charcoal"}`}>
-                ${e.amount.toLocaleString()}
-              </span>
-            </div>
+      {/* Sub-tab navigation */}
+      <div className="overflow-x-auto -mx-1 px-1">
+        <div className="flex gap-1.5 min-w-max pb-1">
+          {subTabs.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setSubTab(t.id)}
+              className={`px-3 py-1.5 text-[10px] tracking-[0.1em] uppercase font-medium whitespace-nowrap transition-colors ${
+                subTab === t.id
+                  ? "bg-charcoal text-white"
+                  : "bg-cream border border-light-gray text-warm-gray hover:text-charcoal"
+              }`}
+              style={{ borderRadius: "9999px" }}
+            >
+              {t.label}
+            </button>
           ))}
         </div>
-        <div className="mt-4 pt-3 border-t border-light-gray flex justify-between items-center">
-          <span className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Total Monthly Expenses</span>
-          <span className="text-xl font-light text-red-500">${totalExpenses.toLocaleString()}</span>
-        </div>
-      </Card>
-
-      {/* P&L Summary */}
-      <Card>
-        <SectionLabel>Monthly Profit & Loss</SectionLabel>
-        <div className="space-y-3">
-          <div className="flex justify-between items-center py-2">
-            <span className="text-xs text-charcoal">Gross Revenue</span>
-            <span className="text-sm font-medium text-charcoal">${grossRevenue.toLocaleString()}</span>
-          </div>
-          <div className="flex justify-between items-center py-2 border-b border-light-gray">
-            <span className="text-xs text-warm-gray pl-4">Platform Fees</span>
-            <span className="text-sm text-red-500">-${platformFees.toLocaleString()}</span>
-          </div>
-          <div className="flex justify-between items-center py-2">
-            <span className="text-xs text-charcoal font-medium">Net Revenue</span>
-            <span className="text-sm font-medium text-charcoal">${netRevenue.toLocaleString()}</span>
-          </div>
-          <div className="flex justify-between items-center py-2 border-b border-light-gray">
-            <span className="text-xs text-warm-gray pl-4">Operating Expenses</span>
-            <span className="text-sm text-red-500">-${totalExpenses.toLocaleString()}</span>
-          </div>
-          <div className="flex justify-between items-center py-2 bg-cream px-3 -mx-1">
-            <span className="text-xs text-charcoal font-medium">Net Profit</span>
-            <span className={`text-lg font-light ${netProfit >= 0 ? "text-emerald-600" : "text-red-500"}`}>
-              ${netProfit.toLocaleString()}
-            </span>
-          </div>
-        </div>
-      </Card>
-
-      {/* Financial Metrics */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <KPICard icon={TrendingUp} label="Net Operating Income" value={`$${netProfit.toLocaleString()}`} accent="text-emerald-600" />
-        <KPICard icon={Moon} label="Cost/Occupied Night" value="$205" accent="text-charcoal" sub="21 nights occupied" />
-        <KPICard icon={Receipt} label="Cleaning/Stay" value="$67" accent="text-charcoal" sub="12 stays this month" />
-        <KPICard icon={Percent} label="Expense Ratio" value={`${Math.round((totalExpenses / grossRevenue) * 100)}%`} accent="text-amber-600" />
-        <KPICard icon={TrendingUp} label="Profit Margin" value={`${Math.round((netProfit / grossRevenue) * 100)}%`} accent={netProfit >= 0 ? "text-emerald-600" : "text-red-500"} />
       </div>
 
-      {/* Expense Trend */}
-      <Card>
-        <SectionLabel>3-Month Expense Trend</SectionLabel>
-        <div className="flex items-end gap-4 h-32">
-          {threeMonthExpenses.map((m) => {
-            const height = (m.total / maxExp) * 100;
-            return (
-              <div key={m.month} className="flex-1 flex flex-col items-center gap-1">
-                <span className="text-[10px] text-charcoal font-medium">${m.total.toLocaleString()}</span>
-                <div
-                  className="w-full bg-red-400/60 hover:bg-red-400/80 transition-colors"
-                  style={{ height: `${height}%` }}
-                />
-                <span className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">{m.month}</span>
+      {/* ──── OVERVIEW ──── */}
+      {subTab === "overview" && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {[
+              { label: "Gross Revenue", value: "$12,450", accent: "text-emerald-600", icon: DollarSign },
+              { label: "Platform Fees", value: "-$1,560", accent: "text-red-500", icon: CreditCard },
+              { label: "Net Revenue", value: "$10,890", accent: "text-charcoal", icon: TrendingUp },
+              { label: "Total Operating Expenses", value: "-$5,210", accent: "text-red-500", icon: Receipt },
+              { label: "Fixed Expenses", value: "$3,430", accent: "text-charcoal", icon: Building2 },
+              { label: "Variable Expenses", value: "$1,780", accent: "text-charcoal", icon: BarChart3 },
+              { label: "Inventory Purchased", value: "$485", accent: "text-charcoal", icon: Wallet },
+              { label: "Inventory Used", value: "$340", accent: "text-charcoal", icon: Receipt },
+              { label: "Remaining Inventory Value", value: "$1,240", accent: "text-charcoal", icon: Shield },
+              { label: "Replacement Reserve Needed", value: "$680", accent: "text-amber-600", icon: AlertCircle },
+              { label: "Net Profit", value: "$7,230", accent: "text-emerald-600 font-medium", icon: TrendingUp },
+              { label: "Profit Margin", value: "58.1%", accent: "text-emerald-600", icon: Percent },
+              { label: "Cost Per Occupied Night", value: "$74.43", accent: "text-charcoal", icon: Moon },
+              { label: "Cost Per Booking", value: "$189.62", accent: "text-charcoal", icon: Target },
+              { label: "Cleaning Cost Per Stay", value: "$95", accent: "text-charcoal", icon: Sparkles },
+              { label: "Supplies Cost Per Stay", value: "$22.50", accent: "text-charcoal", icon: Receipt },
+            ].map((kpi) => (
+              <KPICard key={kpi.label} icon={kpi.icon} label={kpi.label} value={kpi.value} accent={kpi.accent} />
+            ))}
+          </div>
+
+          {/* Monthly Comparison */}
+          <SectionLabel>Monthly Comparison</SectionLabel>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {[
+              { month: "May 2026", revenue: 11200, expenses: 4850, net: 6350 },
+              { month: "Jun 2026", revenue: 13100, expenses: 5420, net: 7680 },
+              { month: "Jul 2026", revenue: 12450, expenses: 5210, net: 7240 },
+            ].map((m) => (
+              <Card key={m.month}>
+                <SectionLabel>{m.month}</SectionLabel>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-[10px] text-warm-gray">Revenue</span>
+                    <span className="text-xs text-charcoal">${m.revenue.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[10px] text-warm-gray">Expenses</span>
+                    <span className="text-xs text-red-500">-${m.expenses.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between pt-2 border-t border-light-gray">
+                    <span className="text-[10px] text-charcoal font-medium">Net Profit</span>
+                    <span className="text-sm font-medium text-emerald-600">${m.net.toLocaleString()}</span>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ──── ALL EXPENSES ──── */}
+      {subTab === "all-expenses" && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <SectionLabel>All Expenses</SectionLabel>
+            <button className="bg-charcoal text-white px-4 py-2 text-[10px] tracking-[0.15em] uppercase font-medium">Add Expense</button>
+          </div>
+          {/* Filter row */}
+          <div className="flex flex-wrap gap-2">
+            {["Property", "Category", "Date Range", "Status"].map((f) => (
+              <div key={f} className="flex items-center gap-1 px-3 py-1.5 bg-cream border border-light-gray text-[10px] text-warm-gray">
+                <Filter size={10} />
+                <span>{f}</span>
+                <ChevronDown size={10} />
               </div>
+            ))}
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-light-gray">
+                  {["Date", "Category", "Subcategory", "Vendor", "Amount", "Payment", "Status", "Frequency", "Booking"].map((h) => (
+                    <th key={h} className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2 px-2 whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { date: "Jul 3", cat: "Cleaning", sub: "Deep Clean", vendor: "Maria's Cleaning Co", amount: 150, payment: "Zelle", status: "Paid", freq: "Per Stay", booking: "BK-1042" },
+                  { date: "Jul 3", cat: "Laundry", sub: "Linens", vendor: "Fresh Fold Laundry", amount: 45, payment: "Card", status: "Paid", freq: "Per Stay", booking: "BK-1042" },
+                  { date: "Jul 2", cat: "Supplies", sub: "Toiletries", vendor: "Amazon", amount: 62, payment: "Card", status: "Paid", freq: "Monthly", booking: "-" },
+                  { date: "Jul 1", cat: "Utilities", sub: "Electricity", vendor: "Oncor/TXU", amount: 180, payment: "Auto-Pay", status: "Paid", freq: "Monthly", booking: "-" },
+                  { date: "Jul 1", cat: "Utilities", sub: "Water", vendor: "City of Arlington", amount: 85, payment: "Auto-Pay", status: "Paid", freq: "Monthly", booking: "-" },
+                  { date: "Jul 1", cat: "Utilities", sub: "Gas", vendor: "Atmos Energy", amount: 45, payment: "Auto-Pay", status: "Paid", freq: "Monthly", booking: "-" },
+                  { date: "Jul 1", cat: "Utilities", sub: "Internet", vendor: "AT&T Fiber", amount: 80, payment: "Auto-Pay", status: "Paid", freq: "Monthly", booking: "-" },
+                  { date: "Jul 1", cat: "Insurance", sub: "STR Policy", vendor: "Proper Insurance", amount: 200, payment: "Auto-Pay", status: "Paid", freq: "Monthly", booking: "-" },
+                  { date: "Jul 1", cat: "Mortgage", sub: "Principal + Interest", vendor: "Wells Fargo", amount: 1500, payment: "Auto-Pay", status: "Paid", freq: "Monthly", booking: "-" },
+                  { date: "Jun 30", cat: "Cleaning", sub: "Turnover Clean", vendor: "Maria's Cleaning Co", amount: 95, payment: "Zelle", status: "Paid", freq: "Per Stay", booking: "BK-1041" },
+                  { date: "Jun 28", cat: "Repairs", sub: "Plumbing", vendor: "DFW Plumbing Pros", amount: 275, payment: "Check", status: "Paid", freq: "One-time", booking: "-" },
+                  { date: "Jun 25", cat: "Supplies", sub: "Kitchen", vendor: "Costco", amount: 48, payment: "Card", status: "Paid", freq: "As Needed", booking: "-" },
+                  { date: "Jun 22", cat: "Lawn Care", sub: "Mowing", vendor: "Green Lawns DFW", amount: 100, payment: "Venmo", status: "Paid", freq: "Bi-weekly", booking: "-" },
+                  { date: "Jun 20", cat: "Software", sub: "PMS", vendor: "Hospitable", amount: 25, payment: "Card", status: "Paid", freq: "Monthly", booking: "-" },
+                  { date: "Jun 18", cat: "Supplies", sub: "Cleaning", vendor: "Home Depot", amount: 34, payment: "Card", status: "Paid", freq: "As Needed", booking: "-" },
+                ].map((row, i) => (
+                  <tr key={i} className="border-b border-light-gray hover:bg-cream/50">
+                    <td className="text-[10px] text-charcoal py-2 px-2 whitespace-nowrap">{row.date}</td>
+                    <td className="text-[10px] text-charcoal py-2 px-2">{row.cat}</td>
+                    <td className="text-[10px] text-warm-gray py-2 px-2">{row.sub}</td>
+                    <td className="text-[10px] text-charcoal py-2 px-2">{row.vendor}</td>
+                    <td className="text-[10px] text-red-500 py-2 px-2 font-medium">${row.amount}</td>
+                    <td className="text-[10px] text-warm-gray py-2 px-2">{row.payment}</td>
+                    <td className="py-2 px-2"><Badge variant={row.status === "Paid" ? "green" : row.status === "Due" ? "yellow" : "red"}>{row.status}</Badge></td>
+                    <td className="text-[10px] text-warm-gray py-2 px-2">{row.freq}</td>
+                    <td className="text-[10px] text-charcoal py-2 px-2">{row.booking}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ──── BOOKING COSTS ──── */}
+      {subTab === "booking-costs" && (
+        <div className="space-y-4">
+          <SectionLabel>Booking Profit & Loss</SectionLabel>
+          {[
+            { guest: "Sarah Mitchell", dates: "Jul 1-4", property: "Modern Ranch in Arlington", nights: 3, nightlyRate: 185, cleaningCollected: 125, platformFee: 83, processing: 18, cleanerCost: 150, laundry: 45, supplies: 22, inventoryUsed: 15, utilities: 54, fixedCosts: 120 },
+            { guest: "James & Kim Park", dates: "Jun 27-Jul 1", property: "Modern Ranch in Arlington", nights: 4, nightlyRate: 175, cleaningCollected: 125, platformFee: 105, processing: 23, cleanerCost: 95, laundry: 45, supplies: 18, inventoryUsed: 12, utilities: 72, fixedCosts: 160 },
+            { guest: "Carlos Rodriguez", dates: "Jun 22-26", property: "Modern Ranch in Arlington", nights: 4, nightlyRate: 195, cleaningCollected: 125, platformFee: 117, processing: 25, cleanerCost: 95, laundry: 45, supplies: 25, inventoryUsed: 18, utilities: 72, fixedCosts: 160 },
+            { guest: "Emily Watson", dates: "Jun 18-21", property: "Modern Ranch in Arlington", nights: 3, nightlyRate: 170, cleaningCollected: 125, platformFee: 77, processing: 16, cleanerCost: 95, laundry: 45, supplies: 20, inventoryUsed: 10, utilities: 54, fixedCosts: 120 },
+            { guest: "The Nguyen Family", dates: "Jun 13-17", property: "Modern Ranch in Arlington", nights: 4, nightlyRate: 190, cleaningCollected: 125, platformFee: 114, processing: 24, cleanerCost: 150, laundry: 55, supplies: 28, inventoryUsed: 20, utilities: 72, fixedCosts: 160 },
+          ].map((b, idx) => {
+            const totalRevenue = b.nights * b.nightlyRate + b.cleaningCollected;
+            const totalExpenses = b.platformFee + b.processing + b.cleanerCost + b.laundry + b.supplies + b.inventoryUsed + b.utilities + b.fixedCosts;
+            const netProfit = totalRevenue - totalExpenses;
+            const margin = ((netProfit / totalRevenue) * 100).toFixed(1);
+            const isExpanded = expandedBooking === idx;
+            return (
+              <Card key={idx}>
+                <button className="w-full flex justify-between items-center" onClick={() => setExpandedBooking(isExpanded ? -1 : idx)}>
+                  <div className="text-left">
+                    <p className="text-xs text-charcoal font-medium">{b.guest}</p>
+                    <p className="text-[10px] text-warm-gray">{b.dates} &middot; {b.property}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className={`text-sm font-medium ${netProfit >= 0 ? "text-emerald-600" : "text-red-500"}`}>${netProfit}</span>
+                    <ChevronDown size={14} className={`text-warm-gray transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                  </div>
+                </button>
+                {isExpanded && (
+                  <div className="mt-4 pt-4 border-t border-light-gray grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div>
+                      <span className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Revenue</span>
+                      <div className="mt-2 space-y-1.5">
+                        <div className="flex justify-between"><span className="text-[10px] text-charcoal">Nightly Revenue ({b.nights} x ${b.nightlyRate})</span><span className="text-[10px] text-charcoal">${b.nights * b.nightlyRate}</span></div>
+                        <div className="flex justify-between"><span className="text-[10px] text-charcoal">Cleaning Fee Collected</span><span className="text-[10px] text-charcoal">${b.cleaningCollected}</span></div>
+                        <div className="flex justify-between pt-1.5 border-t border-light-gray"><span className="text-[10px] text-charcoal font-medium">Total Revenue</span><span className="text-[10px] text-charcoal font-medium">${totalRevenue}</span></div>
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Expenses</span>
+                      <div className="mt-2 space-y-1.5">
+                        {[
+                          ["Platform Fee", b.platformFee],
+                          ["Payment Processing", b.processing],
+                          ["Cleaner Cost", b.cleanerCost],
+                          ["Laundry", b.laundry],
+                          ["Supplies Used", b.supplies],
+                          ["Inventory Used", b.inventoryUsed],
+                          ["Allocated Utilities", b.utilities],
+                          ["Allocated Fixed Costs", b.fixedCosts],
+                        ].map(([name, val]) => (
+                          <div key={name as string} className="flex justify-between"><span className="text-[10px] text-warm-gray">{name}</span><span className="text-[10px] text-red-500">-${val}</span></div>
+                        ))}
+                        <div className="flex justify-between pt-1.5 border-t border-light-gray"><span className="text-[10px] text-charcoal font-medium">Total Expenses</span><span className="text-[10px] text-red-500 font-medium">-${totalExpenses}</span></div>
+                      </div>
+                    </div>
+                    <div className="sm:col-span-2 bg-cream px-4 py-3 flex justify-between items-center">
+                      <div className="flex gap-6">
+                        <div><span className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block">Net Booking Profit</span><span className={`text-lg font-light ${netProfit >= 0 ? "text-emerald-600" : "text-red-500"}`}>${netProfit}</span></div>
+                        <div><span className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block">Profit Margin</span><span className={`text-lg font-light ${Number(margin) >= 40 ? "text-emerald-600" : "text-amber-600"}`}>{margin}%</span></div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </Card>
             );
           })}
         </div>
-      </Card>
+      )}
+
+      {/* ──── RECURRING BILLS ──── */}
+      {subTab === "recurring-bills" && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <SectionLabel>Recurring Bills</SectionLabel>
+            <button className="bg-charcoal text-white px-4 py-2 text-[10px] tracking-[0.15em] uppercase font-medium">Add Bill</button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-light-gray">
+                  {["Name", "Provider", "Amount", "Frequency", "Due Date", "Status", "Auto-Pay"].map((h) => (
+                    <th key={h} className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2 px-2 whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { name: "Mortgage", provider: "Wells Fargo", amount: 1500, freq: "Monthly", due: "1st", status: "Paid", auto: true },
+                  { name: "Water", provider: "City of Arlington", amount: 85, freq: "Monthly", due: "15th", status: "Paid", auto: true },
+                  { name: "Electricity", provider: "Oncor/TXU", amount: 180, freq: "Monthly", due: "10th", status: "Paid", auto: true },
+                  { name: "Gas", provider: "Atmos Energy", amount: 45, freq: "Monthly", due: "12th", status: "Paid", auto: true },
+                  { name: "Internet", provider: "AT&T Fiber", amount: 80, freq: "Monthly", due: "5th", status: "Paid", auto: true },
+                  { name: "Insurance", provider: "Proper Insurance", amount: 200, freq: "Monthly", due: "1st", status: "Paid", auto: true },
+                  { name: "Property Tax", provider: "Tarrant County", amount: 400, freq: "Monthly", due: "1st", status: "Paid", auto: false },
+                  { name: "Trash", provider: "Republic Services", amount: 35, freq: "Monthly", due: "20th", status: "Due", auto: false },
+                  { name: "Lawn Care", provider: "Green Lawns DFW", amount: 100, freq: "Bi-weekly", due: "Every other Fri", status: "Paid", auto: false },
+                  { name: "Pest Control", provider: "ABC Home & Commercial", amount: 50, freq: "Quarterly", due: "Jul 15", status: "Due", auto: false },
+                  { name: "Security", provider: "Ring/SimpliSafe", amount: 25, freq: "Monthly", due: "8th", status: "Paid", auto: true },
+                  { name: "Software", provider: "Hospitable + PriceLabs", amount: 75, freq: "Monthly", due: "1st", status: "Paid", auto: true },
+                  { name: "HOA", provider: "Arlington HOA", amount: 150, freq: "Monthly", due: "1st", status: "Overdue", auto: false },
+                ].map((bill, i) => (
+                  <tr key={i} className="border-b border-light-gray hover:bg-cream/50">
+                    <td className="text-[10px] text-charcoal py-2 px-2 font-medium">{bill.name}</td>
+                    <td className="text-[10px] text-warm-gray py-2 px-2">{bill.provider}</td>
+                    <td className="text-[10px] text-charcoal py-2 px-2">${bill.amount}</td>
+                    <td className="text-[10px] text-warm-gray py-2 px-2">{bill.freq}</td>
+                    <td className="text-[10px] text-warm-gray py-2 px-2">{bill.due}</td>
+                    <td className="py-2 px-2"><Badge variant={bill.status === "Paid" ? "green" : bill.status === "Due" ? "yellow" : "red"}>{bill.status}</Badge></td>
+                    <td className="text-[10px] py-2 px-2">{bill.auto ? <CheckCircle size={12} className="text-emerald-500" /> : <XCircle size={12} className="text-warm-gray" />}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ──── INVENTORY ──── */}
+      {subTab === "inventory" && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <SectionLabel>Inventory</SectionLabel>
+            <div className="flex gap-2">
+              <button className="bg-charcoal text-white px-4 py-2 text-[10px] tracking-[0.15em] uppercase font-medium">Add Item</button>
+              <button className="bg-charcoal text-white px-4 py-2 text-[10px] tracking-[0.15em] uppercase font-medium">Record Purchase</button>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-light-gray">
+                  {["Item", "Category", "Qty", "Reorder Lvl", "Unit Cost", "Total Value", "Condition", "Last Purchased"].map((h) => (
+                    <th key={h} className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2 px-2 whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { item: "Queen Sheet Sets", cat: "Linens", qty: 6, reorder: 4, cost: 45, condition: "Good", lastPurchased: "Jun 10" },
+                  { item: "Bath Towel Sets", cat: "Linens", qty: 8, reorder: 6, cost: 28, condition: "Good", lastPurchased: "May 22" },
+                  { item: "Pillow Protectors", cat: "Linens", qty: 10, reorder: 8, cost: 12, condition: "Fair", lastPurchased: "Apr 15" },
+                  { item: "Duvet Inserts", cat: "Linens", qty: 3, reorder: 3, cost: 65, condition: "Fair", lastPurchased: "Mar 1" },
+                  { item: "Shampoo (bulk)", cat: "Toiletries", qty: 2, reorder: 3, cost: 18, condition: "N/A", lastPurchased: "Jun 28" },
+                  { item: "Body Wash (bulk)", cat: "Toiletries", qty: 2, reorder: 3, cost: 16, condition: "N/A", lastPurchased: "Jun 28" },
+                  { item: "Hand Soap Refills", cat: "Toiletries", qty: 4, reorder: 4, cost: 8, condition: "N/A", lastPurchased: "Jun 15" },
+                  { item: "Toilet Paper (case)", cat: "Toiletries", qty: 1, reorder: 2, cost: 32, condition: "N/A", lastPurchased: "Jun 5" },
+                  { item: "Coffee Pods (box)", cat: "Kitchen", qty: 3, reorder: 2, cost: 22, condition: "N/A", lastPurchased: "Jun 20" },
+                  { item: "Dish Soap", cat: "Kitchen", qty: 3, reorder: 2, cost: 6, condition: "N/A", lastPurchased: "May 30" },
+                  { item: "Dishwasher Pods", cat: "Kitchen", qty: 1, reorder: 2, cost: 18, condition: "N/A", lastPurchased: "Jun 1" },
+                  { item: "Sponges (pack)", cat: "Kitchen", qty: 5, reorder: 3, cost: 4, condition: "N/A", lastPurchased: "Jun 10" },
+                  { item: "All-Purpose Cleaner", cat: "Cleaning", qty: 4, reorder: 3, cost: 8, condition: "N/A", lastPurchased: "Jun 15" },
+                  { item: "Laundry Detergent", cat: "Cleaning", qty: 1, reorder: 2, cost: 24, condition: "N/A", lastPurchased: "Jun 1" },
+                  { item: "Trash Bags (roll)", cat: "Cleaning", qty: 2, reorder: 3, cost: 14, condition: "N/A", lastPurchased: "Jun 10" },
+                  { item: "Smoke Detectors", cat: "Safety", qty: 4, reorder: 4, cost: 25, condition: "Good", lastPurchased: "Jan 15" },
+                  { item: "Fire Extinguisher", cat: "Safety", qty: 2, reorder: 2, cost: 35, condition: "Good", lastPurchased: "Feb 1" },
+                  { item: "First Aid Kit", cat: "Safety", qty: 1, reorder: 1, cost: 28, condition: "Good", lastPurchased: "Mar 10" },
+                  { item: "Smart Lock Batteries", cat: "Electronics", qty: 2, reorder: 4, cost: 12, condition: "N/A", lastPurchased: "May 1" },
+                  { item: "Light Bulbs (LED)", cat: "Electronics", qty: 3, reorder: 4, cost: 8, condition: "N/A", lastPurchased: "Apr 20" },
+                ].map((row, i) => {
+                  const atOrBelowReorder = row.qty <= row.reorder;
+                  return (
+                    <tr key={i} className={`border-b border-light-gray ${atOrBelowReorder ? "bg-amber-50" : "hover:bg-cream/50"}`}>
+                      <td className="text-[10px] text-charcoal py-2 px-2 font-medium">{row.item}</td>
+                      <td className="text-[10px] text-warm-gray py-2 px-2">{row.cat}</td>
+                      <td className={`text-[10px] py-2 px-2 font-medium ${atOrBelowReorder ? "text-amber-700" : "text-charcoal"}`}>{row.qty}</td>
+                      <td className="text-[10px] text-warm-gray py-2 px-2">{row.reorder}</td>
+                      <td className="text-[10px] text-charcoal py-2 px-2">${row.cost}</td>
+                      <td className="text-[10px] text-charcoal py-2 px-2">${row.qty * row.cost}</td>
+                      <td className="text-[10px] text-warm-gray py-2 px-2">{row.condition}</td>
+                      <td className="text-[10px] text-warm-gray py-2 px-2">{row.lastPurchased}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ──── INVENTORY USAGE ──── */}
+      {subTab === "inventory-usage" && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <SectionLabel>Inventory Usage Log</SectionLabel>
+            <button className="bg-charcoal text-white px-4 py-2 text-[10px] tracking-[0.15em] uppercase font-medium">Record Usage</button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <KPICard icon={DollarSign} label="Total Used This Month" value="$340" accent="text-charcoal" />
+            <KPICard icon={Star} label="Top Used Item" value="Bath Towels" accent="text-charcoal" sub="14 units this month" />
+            <KPICard icon={BarChart3} label="Avg Usage Per Booking" value="$24.30" accent="text-charcoal" sub="Across 14 bookings" />
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-light-gray">
+                  {["Date", "Item", "Qty Used", "Cost", "Reason", "Booking", "Notes"].map((h) => (
+                    <th key={h} className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2 px-2 whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { date: "Jul 3", item: "Bath Towel Sets", qty: 2, cost: 56, reason: "Guest Stay", booking: "BK-1042", notes: "Full set replaced" },
+                  { date: "Jul 3", item: "Shampoo (bulk)", qty: 1, cost: 18, reason: "Guest Stay", booking: "BK-1042", notes: "Dispenser refilled" },
+                  { date: "Jul 3", item: "Coffee Pods", qty: 1, cost: 22, reason: "Guest Stay", booking: "BK-1042", notes: "Box restocked" },
+                  { date: "Jul 3", item: "Trash Bags", qty: 1, cost: 14, reason: "Cleaning", booking: "BK-1042", notes: "" },
+                  { date: "Jul 1", item: "Queen Sheet Sets", qty: 1, cost: 45, reason: "Damage", booking: "BK-1041", notes: "Stain - unrepairable" },
+                  { date: "Jun 30", item: "Bath Towel Sets", qty: 2, cost: 56, reason: "Guest Stay", booking: "BK-1041", notes: "" },
+                  { date: "Jun 30", item: "All-Purpose Cleaner", qty: 1, cost: 8, reason: "Cleaning", booking: "BK-1041", notes: "" },
+                  { date: "Jun 30", item: "Toilet Paper", qty: 1, cost: 32, reason: "Guest Stay", booking: "BK-1041", notes: "Case used" },
+                  { date: "Jun 28", item: "Sponges", qty: 1, cost: 4, reason: "Cleaning", booking: "-", notes: "Routine replacement" },
+                  { date: "Jun 26", item: "Light Bulbs (LED)", qty: 2, cost: 16, reason: "Maintenance", booking: "-", notes: "Porch + bedroom" },
+                  { date: "Jun 25", item: "Hand Soap Refills", qty: 2, cost: 16, reason: "Guest Stay", booking: "BK-1040", notes: "" },
+                  { date: "Jun 22", item: "Dishwasher Pods", qty: 1, cost: 18, reason: "Guest Stay", booking: "BK-1039", notes: "Box restocked" },
+                ].map((row, i) => (
+                  <tr key={i} className="border-b border-light-gray hover:bg-cream/50">
+                    <td className="text-[10px] text-charcoal py-2 px-2">{row.date}</td>
+                    <td className="text-[10px] text-charcoal py-2 px-2 font-medium">{row.item}</td>
+                    <td className="text-[10px] text-charcoal py-2 px-2">{row.qty}</td>
+                    <td className="text-[10px] text-red-500 py-2 px-2">${row.cost}</td>
+                    <td className="py-2 px-2"><Badge variant={row.reason === "Damage" ? "red" : row.reason === "Maintenance" ? "yellow" : "gray"}>{row.reason}</Badge></td>
+                    <td className="text-[10px] text-charcoal py-2 px-2">{row.booking}</td>
+                    <td className="text-[10px] text-warm-gray py-2 px-2">{row.notes}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ──── REPLACEMENT RESERVE ──── */}
+      {subTab === "replacement-reserve" && (
+        <div className="space-y-4">
+          <SectionLabel>Replacement Reserve</SectionLabel>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <KPICard icon={DollarSign} label="Total Reserve Needed" value="$680" accent="text-amber-600" />
+            <KPICard icon={AlertCircle} label="Items Needing Now" value="3" accent="text-red-500" />
+            <KPICard icon={Target} label="Below Reorder" value="5" accent="text-amber-600" />
+            <KPICard icon={Calendar} label="Projected 30/60/90 Day" value="$680 / $920 / $1,450" accent="text-charcoal" />
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-light-gray">
+                  {["Item", "Current Qty", "Condition", "Expected Replace", "Cost/Item", "Total Cost", "Priority", "Status"].map((h) => (
+                    <th key={h} className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2 px-2 whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { item: "Toilet Paper (case)", qty: 1, condition: "Low Stock", replace: "Now", costPer: 32, total: 64, priority: "urgent" as const, status: "Order Needed" },
+                  { item: "Shampoo (bulk)", qty: 2, condition: "Low Stock", replace: "Now", costPer: 18, total: 36, priority: "urgent" as const, status: "Order Needed" },
+                  { item: "Body Wash (bulk)", qty: 2, condition: "Low Stock", replace: "Now", costPer: 16, total: 32, priority: "urgent" as const, status: "Order Needed" },
+                  { item: "Smart Lock Batteries", qty: 2, condition: "Low", replace: "Jul 15", costPer: 12, total: 24, priority: "high" as const, status: "Monitor" },
+                  { item: "Laundry Detergent", qty: 1, condition: "Low Stock", replace: "Jul 10", costPer: 24, total: 48, priority: "high" as const, status: "Order Soon" },
+                  { item: "Trash Bags (roll)", qty: 2, condition: "Low", replace: "Jul 20", costPer: 14, total: 42, priority: "high" as const, status: "Monitor" },
+                  { item: "Duvet Inserts", qty: 3, condition: "Fair", replace: "Aug 15", costPer: 65, total: 195, priority: "medium" as const, status: "Plan Replacement" },
+                  { item: "Pillow Protectors", qty: 10, condition: "Fair", replace: "Sep 1", costPer: 12, total: 144, priority: "medium" as const, status: "Plan Replacement" },
+                  { item: "Light Bulbs (LED)", qty: 3, condition: "N/A", replace: "Jul 25", costPer: 8, total: 24, priority: "low" as const, status: "Stock Up" },
+                  { item: "Dishwasher Pods", qty: 1, condition: "Low", replace: "Jul 15", costPer: 18, total: 36, priority: "high" as const, status: "Order Soon" },
+                ].map((row, i) => {
+                  const priorityVariant = { urgent: "red" as const, high: "orange" as const, medium: "yellow" as const, low: "green" as const };
+                  return (
+                    <tr key={i} className="border-b border-light-gray hover:bg-cream/50">
+                      <td className="text-[10px] text-charcoal py-2 px-2 font-medium">{row.item}</td>
+                      <td className="text-[10px] text-charcoal py-2 px-2">{row.qty}</td>
+                      <td className="text-[10px] text-warm-gray py-2 px-2">{row.condition}</td>
+                      <td className="text-[10px] text-charcoal py-2 px-2">{row.replace}</td>
+                      <td className="text-[10px] text-charcoal py-2 px-2">${row.costPer}</td>
+                      <td className="text-[10px] text-charcoal py-2 px-2">${row.total}</td>
+                      <td className="py-2 px-2"><Badge variant={priorityVariant[row.priority]}>{row.priority}</Badge></td>
+                      <td className="text-[10px] text-warm-gray py-2 px-2">{row.status}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ──── WEEKLY SUMMARY ──── */}
+      {subTab === "weekly-summary" && (
+        <div className="space-y-4">
+          <SectionLabel>Weekly Summaries</SectionLabel>
+          {[
+            { week: "Jun 30 - Jul 6", bookings: 3, nights: 10, revenue: 3250, cleaning: 340, laundry: 135, supplies: 84, utilities: 98, repairs: 0, maintenance: 0, inventory: 96 },
+            { week: "Jun 23 - Jun 29", bookings: 2, nights: 8, revenue: 2680, cleaning: 190, laundry: 90, supplies: 48, utilities: 78, repairs: 275, maintenance: 0, inventory: 72 },
+            { week: "Jun 16 - Jun 22", bookings: 3, nights: 11, revenue: 3520, cleaning: 285, laundry: 135, supplies: 75, utilities: 108, repairs: 0, maintenance: 50, inventory: 84 },
+            { week: "Jun 9 - Jun 15", bookings: 2, nights: 7, revenue: 2400, cleaning: 190, laundry: 90, supplies: 56, utilities: 68, repairs: 0, maintenance: 0, inventory: 60 },
+          ].map((w) => {
+            const totalExp = w.cleaning + w.laundry + w.supplies + w.utilities + w.repairs + w.maintenance + w.inventory;
+            const netProfit = w.revenue - totalExp;
+            const margin = ((netProfit / w.revenue) * 100).toFixed(1);
+            return (
+              <Card key={w.week}>
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">{w.week}</span>
+                  <div className="flex gap-3">
+                    <span className="text-[10px] text-warm-gray">{w.bookings} bookings</span>
+                    <span className="text-[10px] text-warm-gray">{w.nights} nights</span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-1.5">
+                  <div className="flex justify-between"><span className="text-[10px] text-charcoal">Revenue</span><span className="text-[10px] text-charcoal font-medium">${w.revenue.toLocaleString()}</span></div>
+                  <div className="flex justify-between"><span className="text-[10px] text-warm-gray">Cleaning</span><span className="text-[10px] text-red-500">-${w.cleaning}</span></div>
+                  <div className="flex justify-between"><span className="text-[10px] text-warm-gray">Laundry</span><span className="text-[10px] text-red-500">-${w.laundry}</span></div>
+                  <div className="flex justify-between"><span className="text-[10px] text-warm-gray">Supplies</span><span className="text-[10px] text-red-500">-${w.supplies}</span></div>
+                  <div className="flex justify-between"><span className="text-[10px] text-warm-gray">Utilities</span><span className="text-[10px] text-red-500">-${w.utilities}</span></div>
+                  <div className="flex justify-between"><span className="text-[10px] text-warm-gray">Repairs</span><span className="text-[10px] text-red-500">{w.repairs > 0 ? `-$${w.repairs}` : "$0"}</span></div>
+                  <div className="flex justify-between"><span className="text-[10px] text-warm-gray">Maintenance</span><span className="text-[10px] text-red-500">{w.maintenance > 0 ? `-$${w.maintenance}` : "$0"}</span></div>
+                  <div className="flex justify-between"><span className="text-[10px] text-warm-gray">Inventory</span><span className="text-[10px] text-red-500">-${w.inventory}</span></div>
+                </div>
+                <div className="mt-3 pt-3 border-t border-light-gray flex justify-between items-center">
+                  <div className="flex gap-4">
+                    <div><span className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Total Expenses</span><span className="text-sm text-red-500 ml-2">-${totalExp.toLocaleString()}</span></div>
+                    <div><span className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Net Profit</span><span className="text-sm text-emerald-600 ml-2">${netProfit.toLocaleString()}</span></div>
+                  </div>
+                  <Badge variant={Number(margin) >= 60 ? "green" : Number(margin) >= 40 ? "yellow" : "red"}>{margin}% margin</Badge>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ──── MONTHLY P&L ──── */}
+      {subTab === "monthly-pl" && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <SectionLabel>Monthly Profit & Loss Statement - July 2026</SectionLabel>
+            <div className="flex gap-2">
+              <button className="bg-charcoal text-white px-4 py-2 text-[10px] tracking-[0.15em] uppercase font-medium">Export CSV</button>
+              <button className="bg-charcoal text-white px-4 py-2 text-[10px] tracking-[0.15em] uppercase font-medium">Export PDF</button>
+            </div>
+          </div>
+          <Card>
+            <div className="space-y-1">
+              {/* Revenue Section */}
+              <div className="py-2 border-b-2 border-charcoal">
+                <span className="text-[10px] tracking-[0.15em] uppercase text-charcoal font-medium">Revenue</span>
+              </div>
+              {[
+                { label: "Gross Booking Revenue", value: "$12,450", indent: false, bold: false },
+                { label: "Platform Fees (Airbnb, VRBO)", value: "-$1,560", indent: true, bold: false, red: true },
+                { label: "Payment Processing Fees", value: "-$186", indent: true, bold: false, red: true },
+              ].map((line, i) => (
+                <div key={i} className={`flex justify-between py-1.5 ${line.indent ? "pl-6" : ""}`}>
+                  <span className={`text-[10px] ${line.bold ? "text-charcoal font-medium" : "text-warm-gray"}`}>{line.label}</span>
+                  <span className={`text-[10px] ${line.red ? "text-red-500" : "text-charcoal"} ${line.bold ? "font-medium" : ""}`}>{line.value}</span>
+                </div>
+              ))}
+              <div className="flex justify-between py-2 border-t border-light-gray bg-cream px-3 -mx-1">
+                <span className="text-[10px] text-charcoal font-medium">Net Revenue</span>
+                <span className="text-[10px] text-charcoal font-medium">$10,704</span>
+              </div>
+
+              {/* Operating Expenses Section */}
+              <div className="py-2 border-b-2 border-charcoal mt-4">
+                <span className="text-[10px] tracking-[0.15em] uppercase text-charcoal font-medium">Operating Expenses</span>
+              </div>
+              {[
+                { label: "Mortgage (Principal + Interest)", value: "$1,500" },
+                { label: "Cleaning Services", value: "$530" },
+                { label: "Utilities (Electric, Water, Gas, Internet)", value: "$390" },
+                { label: "Insurance", value: "$200" },
+                { label: "Property Tax (Monthly Allocation)", value: "$400" },
+                { label: "Laundry Services", value: "$270" },
+                { label: "Supplies (Toiletries, Kitchen, Cleaning)", value: "$144" },
+                { label: "Lawn Care", value: "$100" },
+                { label: "Pest Control (Monthly Allocation)", value: "$17" },
+                { label: "Software & Subscriptions", value: "$75" },
+                { label: "Security Monitoring", value: "$25" },
+                { label: "HOA Fees", value: "$150" },
+                { label: "Repairs & Maintenance", value: "$275" },
+                { label: "Trash Collection", value: "$35" },
+              ].map((line, i) => (
+                <div key={i} className="flex justify-between py-1.5 pl-6">
+                  <span className="text-[10px] text-warm-gray">{line.label}</span>
+                  <span className="text-[10px] text-red-500">{line.value}</span>
+                </div>
+              ))}
+              <div className="flex justify-between py-2 border-t border-light-gray">
+                <span className="text-[10px] text-charcoal font-medium">Total Operating Expenses</span>
+                <span className="text-[10px] text-red-500 font-medium">-$4,111</span>
+              </div>
+
+              {/* Inventory Section */}
+              <div className="py-2 border-b-2 border-charcoal mt-4">
+                <span className="text-[10px] tracking-[0.15em] uppercase text-charcoal font-medium">Inventory</span>
+              </div>
+              {[
+                { label: "Inventory Purchased", value: "$485" },
+                { label: "Inventory Used / Consumed", value: "$340" },
+                { label: "Replacement Reserve Allocation", value: "$680" },
+              ].map((line, i) => (
+                <div key={i} className="flex justify-between py-1.5 pl-6">
+                  <span className="text-[10px] text-warm-gray">{line.label}</span>
+                  <span className="text-[10px] text-red-500">{line.value}</span>
+                </div>
+              ))}
+              <div className="flex justify-between py-2 border-t border-light-gray">
+                <span className="text-[10px] text-charcoal font-medium">Total Inventory Costs</span>
+                <span className="text-[10px] text-red-500 font-medium">-$1,505</span>
+              </div>
+
+              {/* Total Expenses */}
+              <div className="flex justify-between py-2 mt-2 border-t-2 border-charcoal">
+                <span className="text-[10px] text-charcoal font-medium tracking-[0.1em] uppercase">Total Expenses</span>
+                <span className="text-[10px] text-red-500 font-medium">-$5,616</span>
+              </div>
+
+              {/* Bottom Line */}
+              <div className="mt-4 bg-cream px-4 py-3 -mx-1 space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-[10px] text-charcoal font-medium">Net Operating Income</span>
+                  <span className="text-sm text-charcoal font-medium">$5,088</span>
+                </div>
+                <div className="flex justify-between border-t border-light-gray pt-2">
+                  <span className="text-xs text-charcoal font-medium">Net Profit</span>
+                  <span className="text-lg font-light text-emerald-600">$5,088</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[10px] text-warm-gray">Profit Margin</span>
+                  <span className="text-sm text-emerald-600">40.9%</span>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ──── REPORTS ──── */}
+      {subTab === "reports" && (
+        <div className="space-y-4">
+          <SectionLabel>Reports & Exports</SectionLabel>
+          <div className="bg-amber-50 border border-amber-200 px-4 py-3 flex items-start gap-2">
+            <Info size={14} className="text-amber-600 mt-0.5 shrink-0" />
+            <p className="text-[10px] text-amber-700">Report generation will be available once expense data is connected. These reports will auto-populate from your tracked expenses, inventory, and booking costs.</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {[
+              { icon: LineChart, title: "Monthly P&L", desc: "Complete profit & loss statement with all revenue and expense categories.", formats: "CSV / PDF" },
+              { icon: Receipt, title: "Expense Report", desc: "Detailed list of all expenses with categories, vendors, and payment methods.", formats: "CSV" },
+              { icon: Shield, title: "Inventory Report", desc: "Current inventory levels, values, and reorder status across all categories.", formats: "CSV" },
+              { icon: DollarSign, title: "Booking Cost Report", desc: "Per-booking revenue and expense breakdown with profit margins.", formats: "CSV" },
+              { icon: Building2, title: "Vendor Expense Report", desc: "Expenses grouped by vendor with totals and payment history.", formats: "CSV" },
+              { icon: Percent, title: "Tax Category Report", desc: "Expenses organized by tax-deductible categories for filing.", formats: "CSV / PDF" },
+            ].map((report) => (
+              <Card key={report.title}>
+                <div className="flex items-center gap-2 mb-2">
+                  <report.icon size={16} className="text-warm-gray" />
+                  <span className="text-xs text-charcoal font-medium">{report.title}</span>
+                </div>
+                <p className="text-[10px] text-warm-gray mb-3 leading-relaxed">{report.desc}</p>
+                <div className="flex justify-between items-center">
+                  <span className="text-[9px] text-warm-gray">{report.formats}</span>
+                  <button disabled className="px-3 py-1.5 bg-gray-100 text-gray-400 text-[10px] tracking-[0.1em] uppercase font-medium cursor-not-allowed">
+                    Coming Soon
+                  </button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

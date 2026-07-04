@@ -167,3 +167,286 @@ model GuestRequest {
 
   @@index([reservationId])
 }
+
+// ─── Expense & Financial Models ───────────────────────────────────────
+
+model Vendor {
+  id         String   @id @default(cuid())
+  vendorName String
+  vendorType String
+  contactName String?
+  phone      String?
+  email      String?
+  website    String?
+  notes      String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  expenses           Expense[]
+  recurringExpenses  RecurringExpense[]
+  propertyInventory  PropertyInventory[]
+  inventoryPurchases InventoryPurchase[]
+  maintenanceLogs    MaintenanceLog[]
+}
+
+model ExpenseCategory {
+  id          String   @id @default(cuid())
+  name        String
+  type        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  expenses          Expense[]
+  recurringExpenses RecurringExpense[]
+}
+
+model Expense {
+  id            String   @id @default(cuid())
+  propertyId    String
+  unitId        String?
+  bookingId     String?
+  categoryId    String
+  subcategory   String?
+  vendorId      String?
+  expenseDate   DateTime
+  amount        Float
+  paymentMethod String?
+  paymentStatus String   @default("pending")
+  frequency     String   @default("one-time")
+  isRecurring   Boolean  @default(false)
+  receiptUrl    String?
+  notes         String?
+  createdBy     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  category ExpenseCategory @relation(fields: [categoryId], references: [id])
+  vendor   Vendor?         @relation(fields: [vendorId], references: [id])
+
+  @@index([propertyId])
+  @@index([categoryId])
+}
+
+model RecurringExpense {
+  id            String    @id @default(cuid())
+  propertyId    String
+  categoryId    String
+  vendorId      String?
+  name          String
+  amount        Float
+  frequency     String
+  dueDay        Int?
+  nextDueDate   DateTime?
+  autoPay       Boolean   @default(false)
+  paymentStatus String    @default("pending")
+  notes         String?
+  createdAt     DateTime  @default(now())
+
+  category ExpenseCategory @relation(fields: [categoryId], references: [id])
+  vendor   Vendor?         @relation(fields: [vendorId], references: [id])
+
+  @@index([propertyId])
+}
+
+model BookingExpense {
+  id               String   @id @default(cuid())
+  bookingId        String
+  propertyId       String
+  expenseId        String?
+  expenseType      String
+  amount           Float
+  allocationMethod String   @default("direct")
+  notes            String?
+  createdAt        DateTime @default(now())
+
+  @@index([bookingId])
+}
+
+model PropertyBill {
+  id                 String    @id @default(cuid())
+  propertyId         String
+  billType           String
+  provider           String?
+  billingPeriodStart DateTime?
+  billingPeriodEnd   DateTime?
+  amountDue          Float
+  amountPaid         Float     @default(0)
+  dueDate            DateTime?
+  paidDate           DateTime?
+  paymentStatus      String    @default("unpaid")
+  receiptUrl         String?
+  notes              String?
+  createdAt          DateTime  @default(now())
+
+  @@index([propertyId])
+}
+
+model UtilityReading {
+  id           String    @id @default(cuid())
+  propertyId   String
+  utilityType  String
+  readingDate  DateTime
+  meterReading Float?
+  usageAmount  Float?
+  billAmount   Float?
+  notes        String?
+  createdAt    DateTime  @default(now())
+
+  @@index([propertyId])
+}
+
+model PropertyInventory {
+  id                String    @id @default(cuid())
+  propertyId        String
+  unitId            String?
+  itemName          String
+  category          String
+  sku               String?
+  quantityOnHand    Int       @default(0)
+  reorderThreshold  Int       @default(0)
+  unitCost          Float     @default(0)
+  avgUnitCost       Float     @default(0)
+  replacementCost   Float     @default(0)
+  remainingValue    Float     @default(0)
+  vendorId          String?
+  purchaseDate      DateTime?
+  expectedLifeMonths Int?
+  conditionStatus   String    @default("good")
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  vendor       Vendor?              @relation(fields: [vendorId], references: [id])
+  purchases    InventoryPurchase[]
+  usages       InventoryUsage[]
+  replacements InventoryReplacement[]
+
+  @@index([propertyId])
+}
+
+model InventoryPurchase {
+  id                String   @id @default(cuid())
+  propertyId        String
+  unitId            String?
+  itemId            String
+  vendorId          String?
+  purchaseDate      DateTime
+  quantityPurchased Int
+  unitCost          Float
+  totalCost         Float
+  receiptUrl        String?
+  notes             String?
+  createdAt         DateTime @default(now())
+
+  item   PropertyInventory @relation(fields: [itemId], references: [id])
+  vendor Vendor?           @relation(fields: [vendorId], references: [id])
+
+  @@index([propertyId])
+  @@index([itemId])
+}
+
+model InventoryUsage {
+  id               String   @id @default(cuid())
+  propertyId       String
+  unitId           String?
+  bookingId        String?
+  itemId           String
+  usageDate        DateTime
+  quantityUsed     Int
+  unitCostAtUsage  Float    @default(0)
+  totalUsageCost   Float    @default(0)
+  reason           String   @default("guest_stay")
+  notes            String?
+  createdAt        DateTime @default(now())
+
+  item PropertyInventory @relation(fields: [itemId], references: [id])
+
+  @@index([propertyId])
+  @@index([itemId])
+}
+
+model InventoryReplacement {
+  id                     String    @id @default(cuid())
+  propertyId             String
+  unitId                 String?
+  itemId                 String
+  replacementDate        DateTime?
+  quantityReplaced       Int       @default(0)
+  replacementCostPerItem Float     @default(0)
+  totalReplacementCost   Float     @default(0)
+  reason                 String    @default("worn")
+  priority               String    @default("medium")
+  status                 String    @default("needed")
+  notes                  String?
+  createdAt              DateTime  @default(now())
+
+  item PropertyInventory @relation(fields: [itemId], references: [id])
+
+  @@index([propertyId])
+}
+
+model MaintenanceLog {
+  id              String   @id @default(cuid())
+  propertyId      String
+  unitId          String?
+  bookingId       String?
+  vendorId        String?
+  maintenanceDate DateTime
+  issueType       String
+  description     String
+  cost            Float    @default(0)
+  status          String   @default("open")
+  receiptUrl      String?
+  notes           String?
+  createdAt       DateTime @default(now())
+
+  vendor Vendor? @relation(fields: [vendorId], references: [id])
+
+  @@index([propertyId])
+}
+
+model MonthlyPnlReport {
+  id                      String   @id @default(cuid())
+  propertyId              String
+  month                   Int
+  year                    Int
+  grossRevenue            Float    @default(0)
+  platformFees            Float    @default(0)
+  paymentProcessingFees   Float    @default(0)
+  netRevenue              Float    @default(0)
+  fixedExpenses           Float    @default(0)
+  variableExpenses        Float    @default(0)
+  inventoryPurchased      Float    @default(0)
+  inventoryUsed           Float    @default(0)
+  replacementReserveNeeded Float   @default(0)
+  totalExpenses           Float    @default(0)
+  netOperatingIncome      Float    @default(0)
+  netProfit               Float    @default(0)
+  profitMargin            Float    @default(0)
+  createdAt               DateTime @default(now())
+
+  @@unique([propertyId, month, year])
+}
+
+model WeeklyExpenseSummary {
+  id                 String   @id @default(cuid())
+  propertyId         String
+  weekStart          DateTime
+  weekEnd            DateTime
+  grossRevenue       Float    @default(0)
+  occupiedNights     Int      @default(0)
+  cleaningExpenses   Float    @default(0)
+  laundryExpenses    Float    @default(0)
+  suppliesUsed       Float    @default(0)
+  utilitiesAllocated Float    @default(0)
+  repairs            Float    @default(0)
+  maintenance        Float    @default(0)
+  inventoryUsed      Float    @default(0)
+  totalExpenses      Float    @default(0)
+  netProfit          Float    @default(0)
+  profitMargin       Float    @default(0)
+  createdAt          DateTime @default(now())
+
+  @@index([propertyId])
+}

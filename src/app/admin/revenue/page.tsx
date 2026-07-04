@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   DollarSign,
   TrendingUp,
@@ -34,6 +35,7 @@ import {
   ThumbsUp,
   ThumbsDown,
   ExternalLink,
+  Plug,
 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -63,7 +65,8 @@ type Tab =
   | "comps"
   | "payouts"
   | "expenses"
-  | "forecast";
+  | "forecast"
+  | "integrations";
 
 type TimeRange = "month" | "quarter" | "year" | "all" | "custom";
 
@@ -682,6 +685,13 @@ function DynamicPricingTab() {
               </div>
             ))}
           </div>
+          <button
+            onClick={() => alert("Connect a pricing tool like PriceLabs or Wheelhouse from the Integrations tab to enable editing.")}
+            className="mt-3 w-full flex items-center justify-center gap-1.5 bg-cream border border-light-gray px-4 py-2 text-[10px] tracking-[0.1em] uppercase font-medium text-warm-gray hover:text-charcoal hover:border-charcoal/30 transition"
+          >
+            <Plug size={10} />
+            Connect a pricing tool to enable
+          </button>
           <div className="mt-4">
             <SectionLabel>Minimum Stay Rules</SectionLabel>
             <div className="space-y-2">
@@ -792,11 +802,11 @@ function AIPricingTab() {
               </div>
             </div>
             <div className="flex gap-2">
-              <button className="flex items-center gap-1.5 bg-charcoal text-white px-4 py-2 text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-charcoal/90 transition" disabled>
+              <button className="flex items-center gap-1.5 bg-charcoal text-white px-4 py-2 text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-charcoal/90 transition" onClick={() => alert("AI pricing approved. Rate will be updated when integration is connected.")}>
                 <ThumbsUp size={10} />
                 Approve
               </button>
-              <button className="flex items-center gap-1.5 bg-white text-charcoal border border-light-gray px-4 py-2 text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-cream transition" disabled>
+              <button className="flex items-center gap-1.5 bg-white text-charcoal border border-light-gray px-4 py-2 text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-cream transition" onClick={() => alert("AI pricing recommendation rejected.")}>
                 <ThumbsDown size={10} />
                 Reject
               </button>
@@ -1153,7 +1163,7 @@ function ExpensesPLTab() {
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <SectionLabel>All Expenses</SectionLabel>
-            <button className="bg-charcoal text-white px-4 py-2 text-[10px] tracking-[0.15em] uppercase font-medium">Add Expense</button>
+            <button onClick={() => alert("Feature coming soon — connect expense tracking to enable.")} className="bg-charcoal text-white px-4 py-2 text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-charcoal/90 transition">Add Expense</button>
           </div>
           {/* Filter row */}
           <div className="flex flex-wrap gap-2">
@@ -1285,7 +1295,7 @@ function ExpensesPLTab() {
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <SectionLabel>Recurring Bills</SectionLabel>
-            <button className="bg-charcoal text-white px-4 py-2 text-[10px] tracking-[0.15em] uppercase font-medium">Add Bill</button>
+            <button onClick={() => alert("Feature coming soon — connect expense tracking to enable.")} className="bg-charcoal text-white px-4 py-2 text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-charcoal/90 transition">Add Bill</button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left">
@@ -1334,8 +1344,8 @@ function ExpensesPLTab() {
           <div className="flex justify-between items-center">
             <SectionLabel>Inventory</SectionLabel>
             <div className="flex gap-2">
-              <button className="bg-charcoal text-white px-4 py-2 text-[10px] tracking-[0.15em] uppercase font-medium">Add Item</button>
-              <button className="bg-charcoal text-white px-4 py-2 text-[10px] tracking-[0.15em] uppercase font-medium">Record Purchase</button>
+              <button onClick={() => alert("Feature coming soon — connect expense tracking to enable.")} className="bg-charcoal text-white px-4 py-2 text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-charcoal/90 transition">Add Item</button>
+              <button onClick={() => alert("Feature coming soon — connect expense tracking to enable.")} className="bg-charcoal text-white px-4 py-2 text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-charcoal/90 transition">Record Purchase</button>
             </div>
           </div>
           <div className="overflow-x-auto">
@@ -1395,7 +1405,7 @@ function ExpensesPLTab() {
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <SectionLabel>Inventory Usage Log</SectionLabel>
-            <button className="bg-charcoal text-white px-4 py-2 text-[10px] tracking-[0.15em] uppercase font-medium">Record Usage</button>
+            <button onClick={() => alert("Feature coming soon — connect expense tracking to enable.")} className="bg-charcoal text-white px-4 py-2 text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-charcoal/90 transition">Record Usage</button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <KPICard icon={DollarSign} label="Total Used This Month" value="$340" accent="text-charcoal" />
@@ -1545,8 +1555,8 @@ function ExpensesPLTab() {
           <div className="flex justify-between items-center">
             <SectionLabel>Monthly Profit & Loss Statement - July 2026</SectionLabel>
             <div className="flex gap-2">
-              <button className="bg-charcoal text-white px-4 py-2 text-[10px] tracking-[0.15em] uppercase font-medium">Export CSV</button>
-              <button className="bg-charcoal text-white px-4 py-2 text-[10px] tracking-[0.15em] uppercase font-medium">Export PDF</button>
+              <button onClick={() => alert("CSV export coming soon.")} className="bg-charcoal text-white px-4 py-2 text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-charcoal/90 transition">Export CSV</button>
+              <button onClick={() => alert("PDF export coming soon.")} className="bg-charcoal text-white px-4 py-2 text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-charcoal/90 transition">Export PDF</button>
             </div>
           </div>
           <Card>
@@ -1670,8 +1680,8 @@ function ExpensesPLTab() {
                 <p className="text-[10px] text-warm-gray mb-3 leading-relaxed">{report.desc}</p>
                 <div className="flex justify-between items-center">
                   <span className="text-[9px] text-warm-gray">{report.formats}</span>
-                  <button disabled className="px-3 py-1.5 bg-gray-100 text-gray-400 text-[10px] tracking-[0.1em] uppercase font-medium cursor-not-allowed">
-                    Coming Soon
+                  <button onClick={() => alert("Report generation coming soon.")} className="px-3 py-1.5 bg-charcoal text-white text-[10px] tracking-[0.1em] uppercase font-medium hover:bg-charcoal/90 transition">
+                    Generate
                   </button>
                 </div>
               </Card>
@@ -1808,6 +1818,225 @@ function ForecastingTab() {
   );
 }
 
+// ─── Integrations Tab ──────────────────────────────────────────────────────
+
+function IntegrationsTab() {
+  const bookingPlatforms = [
+    { name: "Airbnb", color: "#FF5A5F", status: "Not Connected" as const, desc: "Sync reservations, revenue, guest data, and reviews from Airbnb", alert: "Airbnb integration coming soon — requires approved PMS/channel manager" },
+    { name: "VRBO", color: "#3B5FC0", status: "Not Connected" as const, desc: "Sync bookings, payouts, and calendar from VRBO", alert: "VRBO integration coming soon — requires approved PMS/channel manager" },
+    { name: "Booking.com", color: "#003580", status: "Not Connected" as const, desc: "Connect via Booking.com Connectivity API or channel manager", alert: "Booking.com integration coming soon — requires approved PMS/channel manager" },
+    { name: "Direct Website", color: "#2D6A4F", status: "Active" as const, desc: "Revenue from avenue10.vercel.app direct bookings", alert: "" },
+  ];
+
+  const pmsTools = [
+    { name: "Hostaway", color: "#4F46E5", desc: "All-in-one PMS with channel management, automation, and accounting" },
+    { name: "Guesty", color: "#1E3A5F", desc: "Enterprise property management and distribution platform" },
+    { name: "OwnerRez", color: "#D97706", desc: "Direct booking management with channel distribution" },
+    { name: "Hospitable", color: "#059669", desc: "Automated guest messaging and operations platform" },
+  ];
+
+  const pricingTools = [
+    { name: "PriceLabs", color: "#7C3AED", desc: "AI-powered dynamic pricing and market analytics" },
+    { name: "Beyond (formerly Beyond Pricing)", color: "#2563EB", desc: "Revenue management and dynamic pricing" },
+    { name: "Wheelhouse", color: "#0891B2", desc: "Data-driven pricing recommendations and market insights" },
+    { name: "AirDNA", color: "#DC2626", desc: "Short-term rental market data and analytics" },
+  ];
+
+  const financialTools = [
+    { name: "Stripe", color: "#635BFF", desc: "Payment processing for direct bookings" },
+    { name: "QuickBooks", color: "#2CA01C", desc: "Accounting software integration for expense tracking" },
+    { name: "Xero", color: "#13B5EA", desc: "Cloud accounting and bookkeeping integration" },
+  ];
+
+  const dataProviders = [
+    { name: "KeyData", color: "#1F2937", desc: "STR performance data and benchmarking" },
+    { name: "Transparent", color: "#6366F1", desc: "Vacation rental market intelligence" },
+  ];
+
+  const apiKeys = [
+    { label: "Airbnb API Key", placeholder: "airbnb_api_key_..." },
+    { label: "VRBO API Key", placeholder: "vrbo_api_key_..." },
+    { label: "PriceLabs API Key", placeholder: "pricelabs_api_key_..." },
+    { label: "Stripe API Key", placeholder: "sk_live_..." },
+    { label: "AirDNA API Key", placeholder: "airdna_api_key_..." },
+  ];
+
+  return (
+    <div className="space-y-8">
+      {/* Booking Platforms */}
+      <div>
+        <SectionLabel>Booking Platforms</SectionLabel>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {bookingPlatforms.map((p) => (
+            <Card key={p.name}>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
+                <span className="text-xs text-charcoal font-medium">{p.name}</span>
+              </div>
+              <p className="text-[10px] text-warm-gray mb-3 leading-relaxed">{p.desc}</p>
+              <div className="flex items-center justify-between">
+                {p.status === "Active" ? (
+                  <Badge variant="green">Connected</Badge>
+                ) : (
+                  <Badge variant="gray">Not Connected</Badge>
+                )}
+                {p.status === "Active" ? (
+                  <button
+                    onClick={() => alert("Direct website integration is managed through your site settings.")}
+                    className="px-3 py-1.5 bg-white text-charcoal border border-light-gray text-[10px] tracking-[0.1em] uppercase font-medium hover:bg-cream transition"
+                  >
+                    Manage
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => alert(p.alert)}
+                    className="px-3 py-1.5 bg-charcoal text-white text-[10px] tracking-[0.1em] uppercase font-medium hover:bg-charcoal/90 transition"
+                  >
+                    Connect
+                  </button>
+                )}
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      {/* PMS / Channel Manager */}
+      <div>
+        <SectionLabel>PMS / Channel Manager</SectionLabel>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {pmsTools.map((t) => (
+            <Card key={t.name}>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
+                <span className="text-xs text-charcoal font-medium">{t.name}</span>
+              </div>
+              <p className="text-[10px] text-warm-gray mb-3 leading-relaxed">{t.desc}</p>
+              <div className="flex items-center justify-between">
+                <ComingSoonBadge />
+                <button
+                  onClick={() => alert(`${t.name} integration coming soon.`)}
+                  className="px-3 py-1.5 bg-charcoal text-white text-[10px] tracking-[0.1em] uppercase font-medium hover:bg-charcoal/90 transition"
+                >
+                  Connect
+                </button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      {/* Pricing Tools */}
+      <div>
+        <SectionLabel>Pricing Tools</SectionLabel>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {pricingTools.map((t) => (
+            <Card key={t.name}>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
+                <span className="text-xs text-charcoal font-medium">{t.name}</span>
+              </div>
+              <p className="text-[10px] text-warm-gray mb-3 leading-relaxed">{t.desc}</p>
+              <div className="flex items-center justify-between">
+                <ComingSoonBadge />
+                <button
+                  onClick={() => alert(`${t.name} integration coming soon.`)}
+                  className="px-3 py-1.5 bg-charcoal text-white text-[10px] tracking-[0.1em] uppercase font-medium hover:bg-charcoal/90 transition"
+                >
+                  Connect
+                </button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      {/* Financial Tools */}
+      <div>
+        <SectionLabel>Financial Tools</SectionLabel>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {financialTools.map((t) => (
+            <Card key={t.name}>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
+                <span className="text-xs text-charcoal font-medium">{t.name}</span>
+              </div>
+              <p className="text-[10px] text-warm-gray mb-3 leading-relaxed">{t.desc}</p>
+              <div className="flex items-center justify-between">
+                <ComingSoonBadge />
+                <button
+                  onClick={() => alert(`${t.name} integration coming soon.`)}
+                  className="px-3 py-1.5 bg-charcoal text-white text-[10px] tracking-[0.1em] uppercase font-medium hover:bg-charcoal/90 transition"
+                >
+                  Connect
+                </button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      {/* Data Providers */}
+      <div>
+        <SectionLabel>Data Providers</SectionLabel>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {dataProviders.map((t) => (
+            <Card key={t.name}>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
+                <span className="text-xs text-charcoal font-medium">{t.name}</span>
+              </div>
+              <p className="text-[10px] text-warm-gray mb-3 leading-relaxed">{t.desc}</p>
+              <div className="flex items-center justify-between">
+                <ComingSoonBadge />
+                <button
+                  onClick={() => alert(`${t.name} integration coming soon.`)}
+                  className="px-3 py-1.5 bg-charcoal text-white text-[10px] tracking-[0.1em] uppercase font-medium hover:bg-charcoal/90 transition"
+                >
+                  Connect
+                </button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      {/* API Keys */}
+      <div>
+        <SectionLabel>API Keys</SectionLabel>
+        <Card>
+          <div className="space-y-4">
+            {apiKeys.map((key) => (
+              <div key={key.label} className="flex items-center gap-3">
+                <label className="text-xs text-charcoal w-36 shrink-0">{key.label}</label>
+                <input
+                  type="password"
+                  placeholder={key.placeholder}
+                  disabled
+                  className="flex-1 text-xs bg-cream border border-light-gray px-3 py-2 text-warm-gray cursor-not-allowed"
+                />
+                <button
+                  disabled
+                  className="px-3 py-1.5 bg-gray-100 text-gray-400 text-[10px] tracking-[0.1em] uppercase font-medium cursor-not-allowed"
+                >
+                  Save
+                </button>
+                <span className="text-[9px] text-warm-gray whitespace-nowrap">Coming Soon</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 flex items-start gap-2 bg-cream border border-light-gray px-4 py-3">
+            <Shield size={14} className="text-warm-gray mt-0.5 shrink-0" />
+            <p className="text-[10px] text-warm-gray leading-relaxed">
+              API keys are stored securely in environment variables and never exposed to the frontend.
+            </p>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page Component ────────────────────────────────────────────────────
 
 const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
@@ -1820,10 +2049,17 @@ const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
   { key: "payouts", label: "Payouts", icon: Wallet },
   { key: "expenses", label: "Expenses & P&L", icon: Receipt },
   { key: "forecast", label: "Forecasting", icon: TrendingUp },
+  { key: "integrations", label: "Integrations", icon: Settings },
 ];
 
-export default function AdminRevenuePage() {
-  const [activeTab, setActiveTab] = useState<Tab>("overview");
+const VALID_TABS = TABS.map((t) => t.key);
+
+function AdminRevenuePageInner() {
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState<Tab>(
+    initialTab && VALID_TABS.includes(initialTab as Tab) ? (initialTab as Tab) : "overview"
+  );
   const [timeRange, setTimeRange] = useState<TimeRange>("month");
   const [listings, setListings] = useState<Listing[]>([]);
   const [selectedListing, setSelectedListing] = useState<string>("all");
@@ -1881,7 +2117,7 @@ export default function AdminRevenuePage() {
       </div>
 
       {/* Tab Navigation — icon grid */}
-      <div className="mb-6 grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2">
+      <div className="mb-6 grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-10 gap-2">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.key;
@@ -1917,6 +2153,21 @@ export default function AdminRevenuePage() {
       {activeTab === "payouts" && <PayoutsTab />}
       {activeTab === "expenses" && <ExpensesPLTab />}
       {activeTab === "forecast" && <ForecastingTab />}
+      {activeTab === "integrations" && <IntegrationsTab />}
     </div>
+  );
+}
+
+export default function AdminRevenuePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center py-20">
+          <p className="text-warm-gray text-sm">Loading...</p>
+        </div>
+      }
+    >
+      <AdminRevenuePageInner />
+    </Suspense>
   );
 }

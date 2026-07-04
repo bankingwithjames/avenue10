@@ -2,18 +2,18 @@
 
 import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect } from "react";
 import {
   LayoutDashboard,
   Home,
   Calendar,
-  ClipboardList,
   LogOut,
   Image as ImageIcon,
   FileText,
   DoorOpen,
   BarChart3,
+  Plug,
 } from "lucide-react";
 
 const navItems = [
@@ -24,15 +24,13 @@ const navItems = [
   { href: "/admin/media", label: "Media Library", icon: ImageIcon },
   { href: "/admin/content", label: "Pages & Content", icon: FileText },
   { href: "/admin/checkin", label: "Check-In Portal", icon: DoorOpen },
+  { href: "/admin/revenue?tab=integrations", label: "Integrations", icon: Plug },
 ];
 
-export default function AdminLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+function AdminLayoutInner({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
 
   useEffect(() => {
@@ -82,7 +80,10 @@ export default function AdminLayout({
           <aside className="md:w-52 shrink-0">
             <div className="bg-white border border-light-gray p-3 space-y-0.5">
               {navItems.map((item) => {
-                const active = pathname === item.href;
+                const [itemPath, itemQuery] = item.href.split("?");
+                const active = itemQuery
+                  ? pathname === itemPath && searchParams.get("tab") === itemQuery.split("=")[1]
+                  : pathname === itemPath && !searchParams.get("tab");
                 return (
                   <Link
                     key={item.href}
@@ -106,5 +107,23 @@ export default function AdminLayout({
         </div>
       </div>
     </div>
+  );
+}
+
+export default function AdminLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-cream">
+          <p className="text-warm-gray text-sm">Loading...</p>
+        </div>
+      }
+    >
+      <AdminLayoutInner>{children}</AdminLayoutInner>
+    </Suspense>
   );
 }

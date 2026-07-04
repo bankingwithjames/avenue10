@@ -1349,27 +1349,31 @@ export default function AdminRevenuePage() {
         </div>
       </div>
 
-      {/* Tab Navigation */}
-      <div className="mb-6 -mx-1 overflow-x-auto">
-        <div className="flex gap-px min-w-max px-1">
-          {TABS.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`flex items-center gap-1.5 px-3 py-2 text-[10px] tracking-[0.15em] uppercase font-medium transition whitespace-nowrap ${
-                  activeTab === tab.key
-                    ? "bg-charcoal text-white"
-                    : "bg-white text-warm-gray border border-light-gray hover:bg-cream hover:text-charcoal"
-                }`}
-              >
-                <Icon size={12} />
+      {/* Tab Navigation — icon grid */}
+      <div className="mb-6 grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2">
+        {TABS.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.key;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`group relative flex flex-col items-center gap-1.5 px-2 py-3.5 transition-all ${
+                isActive
+                  ? "bg-charcoal text-white shadow-md"
+                  : "bg-white text-warm-gray border border-light-gray hover:border-charcoal/30 hover:text-charcoal hover:shadow-sm"
+              }`}
+            >
+              <Icon size={18} className={isActive ? "text-white" : "text-warm-gray/60 group-hover:text-charcoal"} />
+              <span className="text-[8px] tracking-[0.12em] uppercase font-medium leading-tight text-center">
                 {tab.label}
-              </button>
-            );
-          })}
-        </div>
+              </span>
+              {isActive && (
+                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-1.5 h-1.5 bg-charcoal rotate-45" />
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* Tab Content */}

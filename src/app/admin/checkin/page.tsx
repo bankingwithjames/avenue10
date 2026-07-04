@@ -7,6 +7,7 @@ import {
   KeyRound,
   MapPin,
   MessageSquare,
+  Star,
   Plus,
   Trash2,
   Save,
@@ -48,6 +49,7 @@ export default function AdminCheckInPage() {
           { key: "inventory", label: "Inventory", icon: ClipboardList },
           { key: "instructions", label: "Instructions & Codes", icon: KeyRound },
           { key: "recommendations", label: "Things to Do", icon: MapPin },
+          { key: "reviews", label: "Guest Reviews", icon: Star },
           { key: "requests", label: "Guest Requests", icon: MessageSquare },
         ].map((s) => (
           <button
@@ -93,7 +95,8 @@ export default function AdminCheckInPage() {
         <InstructionsEditor listingId={selectedListing} />
       )}
       {activeSection === "recommendations" && <RecommendationsEditor />}
-      {activeSection === "requests" && <GuestRequestsManager />}
+      {activeSection === "reviews" && <GuestRequestsManager filterType="review" />}
+      {activeSection === "requests" && <GuestRequestsManager filterType="request" />}
     </div>
   );
 }
@@ -519,13 +522,13 @@ function RecommendationsEditor() {
 }
 
 /* ─── Guest Requests Manager ─── */
-function GuestRequestsManager() {
-  const [requests, setRequests] = useState<any[]>([]);
+function GuestRequestsManager({ filterType }: { filterType: "review" | "request" }) {
+  const [allRequests, setAllRequests] = useState<any[]>([]);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
 
   function load() {
-    fetch("/api/admin/guest-requests").then((r) => r.json()).then(setRequests);
+    fetch("/api/admin/guest-requests").then((r) => r.json()).then(setAllRequests);
   }
 
   useEffect(() => { load(); }, []);
@@ -541,11 +544,16 @@ function GuestRequestsManager() {
     load();
   }
 
+  const requests = allRequests.filter((r) => r.type === filterType);
+
   if (requests.length === 0) {
+    const Icon = filterType === "review" ? Star : MessageSquare;
     return (
       <div className="bg-white border border-light-gray p-8 text-center">
-        <MessageSquare size={32} className="mx-auto text-warm-gray/40 mb-3" />
-        <p className="text-sm text-warm-gray">No guest requests yet.</p>
+        <Icon size={32} className="mx-auto text-warm-gray/40 mb-3" />
+        <p className="text-sm text-warm-gray">
+          No guest {filterType === "review" ? "reviews" : "requests"} yet.
+        </p>
       </div>
     );
   }

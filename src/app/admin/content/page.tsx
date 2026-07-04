@@ -177,7 +177,7 @@ export default function AdminContentPage() {
     setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
   }
 
-  const sections = [...new Set(content.map((c) => c.section))];
+  const sections = [...new Set(content.map((c) => c.section))].filter((s) => s !== "checkin");
 
   const inputClass = "w-full bg-transparent border border-light-gray text-charcoal text-sm px-3 py-2.5 outline-none focus:border-charcoal/40 transition-colors";
   const labelClass = "text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium mb-1 block";

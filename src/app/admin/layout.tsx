@@ -13,13 +13,14 @@ import {
   Image as ImageIcon,
   FileText,
   DoorOpen,
+  BarChart3,
 } from "lucide-react";
 
 const navItems = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/listings", label: "Listings", icon: Home },
-  { href: "/admin/reservations", label: "Reservations", icon: ClipboardList },
-  { href: "/admin/availability", label: "Availability", icon: Calendar },
+  { href: "/admin/availability", label: "Calendar", icon: Calendar },
+  { href: "/admin/revenue", label: "Revenue & Analytics", icon: BarChart3 },
   { href: "/admin/media", label: "Media Library", icon: ImageIcon },
   { href: "/admin/content", label: "Pages & Content", icon: FileText },
   { href: "/admin/checkin", label: "Check-In Portal", icon: DoorOpen },

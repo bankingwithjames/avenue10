@@ -495,7 +495,7 @@ export default function AdminDashboard() {
       {/* ================================================================= */}
       {/* BOOKING PIPELINE                                                  */}
       {/* ================================================================= */}
-      <Section title="Booking Pipeline" icon={CalendarCheck} action={{ label: "View Bookings", href: "/admin/bookings" }}>
+      <Section title="Booking Pipeline" icon={CalendarCheck} action={{ label: "View Bookings", href: "/admin/availability" }}>
         <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
           <PipelineStage label="Pending" count={pendingBookings.length} color="amber" />
           <PipelineStage label="Confirmed" count={confirmedReservations.length} color="blue" />
@@ -764,7 +764,7 @@ function OperationRow({
           Portal
         </Link>
         <Link
-          href="/admin/bookings"
+          href="/admin/availability"
           className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium border border-light-gray px-2 py-1 hover:text-charcoal hover:border-stone transition-colors whitespace-nowrap"
         >
           Booking

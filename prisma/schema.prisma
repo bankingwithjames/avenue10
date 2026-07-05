@@ -492,7 +492,7 @@ model InventoryReplacement {
 }
 
 model MaintenanceLog {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   propertyId      String
   unitId          String?
   bookingId       String?
@@ -500,15 +500,115 @@ model MaintenanceLog {
   maintenanceDate DateTime
   issueType       String
   description     String
-  cost            Float    @default(0)
-  status          String   @default("open")
+  cost            Float     @default(0)
+  status          String    @default("open")
   receiptUrl      String?
   notes           String?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime  @default(now())
 
-  vendor Vendor? @relation(fields: [vendorId], references: [id])
+  // New fields
+  listingId          String?
+  roomId             String?
+  inventoryItemId    String?
+  guestRequestId     String?
+  issueTitle         String?
+  category           String?
+  priority           String    @default("medium")
+  reportedBy         String?
+  scheduledDate      DateTime?
+  startTime          DateTime?
+  endTime            DateTime?
+  dueDate            DateTime?
+  completedDate      DateTime?
+  estimatedCost      Float     @default(0)
+  actualCost         Float     @default(0)
+  laborCost          Float     @default(0)
+  materialsCost      Float     @default(0)
+  beforePhotoUrl     String?
+  afterPhotoUrl      String?
+  createdBy          String?
+  updatedAt          DateTime  @updatedAt
+
+  vendor             Vendor?   @relation(fields: [vendorId], references: [id])
+  calendarEvents     MaintenanceCalendarEvent[]
+  files              MaintenanceFile[]
+  activityLogs       MaintenanceActivityLog[]
 
   @@index([propertyId])
+  @@index([vendorId])
+  @@index([status])
+}
+
+model MaintenanceCalendarEvent {
+  id                 String    @id @default(cuid())
+  maintenanceLogId   String
+  propertyId         String
+  listingId          String?
+  title              String
+  startDatetime      DateTime
+  endDatetime        DateTime?
+  calendarViewStatus String    @default("scheduled")
+  colorStatus        String?
+  isRecurring        Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  maintenanceLog     MaintenanceLog @relation(fields: [maintenanceLogId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+  @@index([maintenanceLogId])
+}
+
+model RecurringMaintenanceTask {
+  id                String    @id @default(cuid())
+  propertyId        String
+  listingId         String?
+  roomId            String?
+  taskName          String
+  category          String
+  frequency         String    @default("monthly")
+  nextDueDate       DateTime?
+  lastCompletedDate DateTime?
+  vendorId          String?
+  estimatedCost     Float     @default(0)
+  reminderDaysBefore Int      @default(7)
+  autoCreateEvent   Boolean   @default(true)
+  status            String    @default("active")
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([propertyId])
+}
+
+model MaintenanceFile {
+  id                 String   @id @default(cuid())
+  maintenanceLogId   String
+  fileUrl            String
+  fileType           String?
+  fileName           String?
+  fileCategory       String   @default("photo")
+  uploadedBy         String?
+  createdAt          DateTime @default(now())
+
+  maintenanceLog     MaintenanceLog @relation(fields: [maintenanceLogId], references: [id], onDelete: Cascade)
+
+  @@index([maintenanceLogId])
+}
+
+model MaintenanceActivityLog {
+  id                 String   @id @default(cuid())
+  maintenanceLogId   String
+  activityType       String
+  oldValue           String?
+  newValue           String?
+  note               String?
+  createdBy          String?
+  createdAt          DateTime @default(now())
+
+  maintenanceLog     MaintenanceLog @relation(fields: [maintenanceLogId], references: [id], onDelete: Cascade)
+
+  @@index([maintenanceLogId])
 }
 
 model MonthlyPnlReport {

@@ -1,11 +1,11 @@
 import pg from "pg";
 import dns from "dns";
+import "dotenv/config";
 
 dns.setDefaultResultOrder("ipv4first");
 
-const SUPABASE_URL = "postgresql://postgres.rtfddpfbegudbpiqofty:grigsbyave1006@aws-0-us-east-1.pooler.supabase.com:6543/postgres?sslmode=disable";
-
-const pool = new pg.Pool({ connectionString: SUPABASE_URL });
+const connStr = process.env.SUPABASE_DIRECT_URL || process.env.DATABASE_URL!;
+const pool = new pg.Pool({ connectionString: connStr });
 
 async function main() {
   const client = await pool.connect();

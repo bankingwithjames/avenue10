@@ -25,7 +25,8 @@ export async function GET() {
       return NextResponse.json(listings);
     } catch (e2) {
       console.error("Listings fallback query also failed:", e2);
-      return NextResponse.json({ error: "Failed to load listings" }, { status: 500 });
+      const msg = e2 instanceof Error ? e2.message : String(e2);
+      return NextResponse.json({ error: "Failed to load listings", debug: msg }, { status: 500 });
     }
   }
 }

@@ -628,3 +628,181 @@ model ListingContentLink {
   @@unique([listingId, contentKey])
   @@index([listingId])
 }
+
+// ─── Guest CRM System ─────────────────────────────────────────────────
+
+model Guest {
+  id              String   @id @default(cuid())
+  firstName       String
+  lastName        String
+  email           String   @unique
+  phone           String?
+  status          String   @default("active")
+  guestType       String   @default("leisure")
+  isVip           Boolean  @default(false)
+  doNotHost       Boolean  @default(false)
+  doNotContact    Boolean  @default(false)
+  emailOptIn      Boolean  @default(true)
+  smsOptIn        Boolean  @default(false)
+  marketingOptIn  Boolean  @default(true)
+  preferredContact String  @default("email")
+  source          String   @default("direct")
+  lifetimeRevenue Float    @default(0)
+  totalBookings   Int      @default(0)
+  internalNotes   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  accommodation   GuestAccommodation?
+  tags            GuestTagAssignment[]
+  notes           GuestNote[]
+  messages        GuestMessage[]
+  campaignRecipients CampaignRecipient[]
+  activityLogs    CrmActivityLog[]
+}
+
+model GuestAccommodation {
+  id                     String   @id @default(cuid())
+  guestId                String   @unique
+  guest                  Guest    @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  accessibilityNeeds     String?
+  familyNeeds            String?
+  petNotes               String?
+  parkingNeeds           String?
+  sleepingPreferences    String?
+  temperaturePreferences String?
+  allergies              String?
+  specialOccasions       String?
+  preferredCheckinTime   String?
+  preferredCheckoutTime  String?
+  preferredListing       String?
+  favoriteAmenities      String[]
+  hostNotes              String?
+  updatedAt              DateTime @updatedAt
+}
+
+model GuestTag {
+  id    String @id @default(cuid())
+  name  String @unique
+  color String @default("#6b7280")
+
+  assignments GuestTagAssignment[]
+}
+
+model GuestTagAssignment {
+  id      String   @id @default(cuid())
+  guestId String
+  tagId   String
+  guest   Guest    @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  tag     GuestTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([guestId, tagId])
+}
+
+model GuestNote {
+  id        String   @id @default(cuid())
+  guestId   String
+  guest     Guest    @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  content   String
+  author    String?
+  createdAt DateTime @default(now())
+
+  @@index([guestId])
+}
+
+model GuestMessage {
+  id             String    @id @default(cuid())
+  guestId        String
+  guest          Guest     @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  reservationId  String?
+  channel        String
+  messageType    String
+  direction      String    @default("outbound")
+  subject        String?
+  body           String
+  deliveryStatus String    @default("sent")
+  openedAt       DateTime?
+  clickedAt      DateTime?
+  repliedAt      DateTime?
+  campaignId     String?
+  createdAt      DateTime  @default(now())
+
+  @@index([guestId])
+}
+
+model Campaign {
+  id              String    @id @default(cuid())
+  name            String
+  type            String    @default("email")
+  status          String    @default("draft")
+  segment         String    @default("all")
+  listingFilter   String?
+  subject         String?
+  body            String
+  ctaText         String?
+  ctaLink         String?
+  scheduledAt     DateTime?
+  sentAt          DateTime?
+  totalRecipients Int       @default(0)
+  totalSent       Int       @default(0)
+  totalOpened     Int       @default(0)
+  totalClicked    Int       @default(0)
+  totalBounced    Int       @default(0)
+  createdBy       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  recipients CampaignRecipient[]
+}
+
+model CampaignRecipient {
+  id             String    @id @default(cuid())
+  campaignId     String
+  campaign       Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  guestId        String
+  guest          Guest     @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  deliveryStatus String    @default("pending")
+  sentAt         DateTime?
+  openedAt       DateTime?
+  clickedAt      DateTime?
+
+  @@unique([campaignId, guestId])
+  @@index([campaignId])
+  @@index([guestId])
+}
+
+model MessageTemplate {
+  id        String   @id @default(cuid())
+  name      String
+  type      String   @default("email")
+  category  String   @default("general")
+  subject   String?
+  body      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CrmAutomation {
+  id         String   @id @default(cuid())
+  name       String
+  trigger    String
+  templateId String?
+  delay      String?
+  isActive   Boolean  @default(true)
+  conditions String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model CrmActivityLog {
+  id        String   @id @default(cuid())
+  guestId   String?
+  guest     Guest?   @relation(fields: [guestId], references: [id], onDelete: SetNull)
+  action    String
+  details   String?
+  actor     String?
+  createdAt DateTime @default(now())
+
+  @@index([guestId])
+}

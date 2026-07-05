@@ -1,26 +1,53 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { KeyRound, Wifi, Tv, DoorOpen, Clock, Info } from "lucide-react";
+import {
+  KeyRound, Wifi, Tv, DoorOpen, Clock, Info, LogOut, Car, Smartphone,
+  Thermometer, Trash2, Shirt, Phone, BookOpen, Moon, AlertTriangle,
+  Copy, Check, ShieldAlert,
+} from "lucide-react";
 
 interface Instruction {
   id: string;
   category: string;
   title: string;
   value: string;
+  sensitive?: boolean;
+  visibleBeforeHours?: number;
+  locked?: boolean;
 }
 
 const CATEGORY_ICONS: Record<string, typeof KeyRound> = {
-  "Door Codes": DoorOpen,
+  "Check-In": DoorOpen,
+  "Check-Out": LogOut,
+  "Door Codes": KeyRound,
   "Wi-Fi": Wifi,
+  "WiFi": Wifi,
+  "Parking": Car,
+  "Smart Lock": Smartphone,
+  "Thermostat": Thermometer,
+  "TV/Remote": Tv,
   "Streaming": Tv,
-  "Check-In": Clock,
-  "Check-Out": Clock,
+  "Trash": Trash2,
+  "Laundry": Shirt,
+  "Emergency": Phone,
+  "House Manual": BookOpen,
+  "Quiet Hours": Moon,
+  "Damage Reporting": AlertTriangle,
 };
 
-export function InstructionsTab({ token }: { token: string }) {
+const COPIABLE_CATEGORIES = ["Door Codes", "Wi-Fi", "WiFi", "Smart Lock"];
+
+interface Props {
+  token: string;
+  checkIn: string;
+  signed: boolean;
+}
+
+export function InstructionsTab({ token, checkIn, signed }: Props) {
   const [items, setItems] = useState<Instruction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/checkin/instructions", {
@@ -32,6 +59,44 @@ export function InstructionsTab({ token }: { token: string }) {
         setLoading(false);
       });
   }, [token]);
+
+  function isCodeVisible(item: Instruction): boolean {
+    if (!signed) return false;
+    if (!item.visibleBeforeHours || item.visibleBeforeHours <= 0) return true;
+    const checkInDate = new Date(checkIn);
+    const visibleFrom = new Date(checkInDate.getTime() - item.visibleBeforeHours * 60 * 60 * 1000);
+    return new Date() >= visibleFrom;
+  }
+
+  function getLockedMessage(item: Instruction): string | null {
+    if (!signed) return "Sign terms to view";
+    if (item.locked) {
+      if (item.visibleBeforeHours && item.visibleBeforeHours > 0) {
+        return `Available ${item.visibleBeforeHours} hours before check-in`;
+      }
+      return "Not yet available";
+    }
+    if (item.visibleBeforeHours && item.visibleBeforeHours > 0 && !isCodeVisible(item)) {
+      return `Available ${item.visibleBeforeHours} hours before check-in`;
+    }
+    return null;
+  }
+
+  function getDisplayValue(item: Instruction): { value: string; isLocked: boolean } {
+    const lockedMsg = getLockedMessage(item);
+    if (lockedMsg) return { value: lockedMsg, isLocked: true };
+    return { value: item.value, isLocked: false };
+  }
+
+  async function handleCopy(text: string, id: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch {
+      // Clipboard not available
+    }
+  }
 
   if (loading) return <p className="text-sm text-warm-gray">Loading instructions...</p>;
 
@@ -60,6 +125,7 @@ export function InstructionsTab({ token }: { token: string }) {
 
       {Object.entries(categories).map(([category, catItems]) => {
         const Icon = CATEGORY_ICONS[category] || Info;
+        const isCopyable = COPIABLE_CATEGORIES.includes(category);
         return (
           <div key={category} className="bg-white border border-light-gray">
             <div className="px-6 py-4 border-b border-light-gray bg-cream/50 flex items-center gap-3">
@@ -69,14 +135,49 @@ export function InstructionsTab({ token }: { token: string }) {
               </h3>
             </div>
             <div className="divide-y divide-light-gray">
-              {catItems.map((item) => (
-                <div key={item.id} className="px-6 py-4">
-                  <p className="text-xs text-warm-gray mb-1">{item.title}</p>
-                  <p className="text-sm text-charcoal font-medium whitespace-pre-line">
-                    {item.value}
-                  </p>
-                </div>
-              ))}
+              {catItems.map((item) => {
+                const { value, isLocked } = getDisplayValue(item);
+                return (
+                  <div key={item.id} className="px-6 py-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="text-xs text-warm-gray">{item.title}</p>
+                          {item.sensitive && !isLocked && (
+                            <ShieldAlert size={12} className="text-amber-500 shrink-0" />
+                          )}
+                        </div>
+                        {isLocked ? (
+                          <p className="text-sm text-warm-gray/60 italic flex items-center gap-1.5">
+                            <Clock size={12} />
+                            {value}
+                          </p>
+                        ) : (
+                          <p className="text-sm text-charcoal font-medium whitespace-pre-line">
+                            {value}
+                          </p>
+                        )}
+                      </div>
+                      {isCopyable && !isLocked && (
+                        <button
+                          onClick={() => handleCopy(value, item.id)}
+                          className="shrink-0 flex items-center gap-1 text-[9px] tracking-[0.15em] uppercase text-warm-gray hover:text-charcoal transition-colors mt-4 border border-light-gray px-2.5 py-1.5"
+                        >
+                          {copiedId === item.id ? (
+                            <>
+                              <Check size={10} /> Copied
+                            </>
+                          ) : (
+                            <>
+                              <Copy size={10} /> Copy
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         );

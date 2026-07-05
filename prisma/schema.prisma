@@ -107,8 +107,14 @@ model Reservation {
   updatedAt     DateTime @updatedAt
 
   accessCode    String?
+  channel       String?
+  portalToken   String?  @unique
+  portalExpires DateTime?
+  portalRevoked Boolean  @default(false)
   agreement     ReservationAgreement?
   guestRequests GuestRequest[]
+  guestReviews  GuestReview[]
+  portalLogs    GuestPortalLog[]
 }
 
 model ReservationAgreement {
@@ -118,40 +124,61 @@ model ReservationAgreement {
   signedName    String
   signedAt      DateTime    @default(now())
   ipAddress     String?
+  userAgent     String?
   documentHash  String
 }
 
 model InventoryItem {
-  id        String @id @default(cuid())
-  listingId String
-  room      String
-  itemName  String
-  quantity  Int    @default(1)
-  sortOrder Int    @default(0)
+  id               String    @id @default(cuid())
+  listingId        String
+  room             String
+  itemName         String
+  category         String    @default("General")
+  quantity         Int       @default(1)
+  quantityExpected Int       @default(1)
+  condition        String    @default("good")
+  replacementCost  Float     @default(0)
+  guestVisible     Boolean   @default(true)
+  lastChecked      DateTime?
+  photoUrl         String?
+  notes            String?
+  sortOrder        Int       @default(0)
+
+  inventoryReports GuestInventoryReport[]
 
   @@index([listingId])
 }
 
 model CheckinInstruction {
-  id        String @id @default(cuid())
-  listingId String
-  category  String
-  title     String
-  value     String
-  sortOrder Int    @default(0)
+  id                 String  @id @default(cuid())
+  listingId          String
+  category           String
+  title              String
+  value              String
+  sensitive          Boolean @default(false)
+  visibleBeforeHours Int     @default(0)
+  adminNotes         String?
+  sortOrder          Int     @default(0)
 
   @@index([listingId])
 }
 
 model LocalRecommendation {
-  id          String  @id @default(cuid())
-  category    String
-  name        String
-  description String
-  address     String?
-  link        String?
-  imageUrl    String?
-  sortOrder   Int     @default(0)
+  id           String  @id @default(cuid())
+  category     String
+  name         String
+  description  String
+  address      String?
+  link         String?
+  phone        String?
+  imageUrl     String?
+  distance     String?
+  priceRange   String?
+  bestFor      String?
+  mapLink      String?
+  guestVisible Boolean @default(true)
+  featured     Boolean @default(false)
+  sortOrder    Int     @default(0)
 }
 
 model GuestRequest {
@@ -160,10 +187,64 @@ model GuestRequest {
   reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
   type          String
   message       String
-  status        String      @default("pending")
+  category      String      @default("general")
+  priority      String      @default("normal")
+  status        String      @default("new")
+  assignedStaff String?
+  internalNotes String?
   adminReply    String?
+  photos        String[]
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+
+  @@index([reservationId])
+}
+
+// ─── Guest Review System ─────────────────────────────────────────────
+
+model GuestReview {
+  id                String      @id @default(cuid())
+  reservationId     String
+  reservation       Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  overallRating     Int         @default(5)
+  cleanlinessRating Int?
+  accuracyRating    Int?
+  communicationRating Int?
+  locationRating    Int?
+  valueRating       Int?
+  comments          String?
+  adminResponse     String?
+  publishToWebsite  Boolean     @default(false)
+  featured          Boolean     @default(false)
+  source            String      @default("direct")
+  approvalStatus    String      @default("pending")
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@index([reservationId])
+}
+
+model GuestInventoryReport {
+  id          String        @id @default(cuid())
+  itemId      String
+  item        InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  reportType  String
+  description String?
+  photos      String[]
+  status      String        @default("new")
+  createdAt   DateTime      @default(now())
+
+  @@index([itemId])
+}
+
+model GuestPortalLog {
+  id            String      @id @default(cuid())
+  reservationId String
+  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  action        String
+  details       String?
+  ipAddress     String?
+  createdAt     DateTime    @default(now())
 
   @@index([reservationId])
 }

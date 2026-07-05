@@ -7,7 +7,23 @@ export async function GET(req: NextRequest) {
   if (error) return error;
 
   const items = await prisma.localRecommendation.findMany({
-    orderBy: [{ category: "asc" }, { sortOrder: "asc" }],
+    where: { guestVisible: true },
+    orderBy: [{ featured: "desc" }, { category: "asc" }, { sortOrder: "asc" }],
+    select: {
+      id: true,
+      category: true,
+      name: true,
+      description: true,
+      address: true,
+      link: true,
+      imageUrl: true,
+      phone: true,
+      distance: true,
+      priceRange: true,
+      bestFor: true,
+      mapLink: true,
+      featured: true,
+    },
   });
 
   return NextResponse.json(items);

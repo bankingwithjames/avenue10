@@ -47,12 +47,14 @@ export async function POST(req: NextRequest) {
     .digest("hex");
 
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0] || "unknown";
+  const userAgent = req.headers.get("user-agent") || null;
 
   const agreement = await prisma.reservationAgreement.create({
     data: {
       reservationId: guest!.reservationId,
       signedName: signedName.trim(),
       ipAddress: ip,
+      userAgent,
       documentHash,
     },
   });

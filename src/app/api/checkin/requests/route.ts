@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   const { error, guest } = await requireGuest(req);
   if (error) return error;
 
-  const { type, message } = await req.json();
+  const { type, message, category, priority } = await req.json();
   if (!type || !message?.trim()) {
     return NextResponse.json({ error: "Type and message are required" }, { status: 400 });
   }
@@ -28,6 +28,8 @@ export async function POST(req: NextRequest) {
       reservationId: guest!.reservationId,
       type,
       message: message.trim(),
+      category: category || "general",
+      priority: priority || "normal",
     },
   });
 

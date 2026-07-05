@@ -1,7 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { MapPin, ExternalLink, Utensils, Music, Trophy, Calendar, Star } from "lucide-react";
+import {
+  MapPin, ExternalLink, Utensils, Coffee, Wine, Moon, ShoppingCart,
+  Calendar, Star, Landmark, Users, ShoppingBag, Bus, Car, Heart,
+  Phone, Navigation,
+} from "lucide-react";
 
 interface Recommendation {
   id: string;
@@ -11,14 +15,30 @@ interface Recommendation {
   address?: string;
   link?: string;
   imageUrl?: string;
+  phone?: string;
+  distance?: string;
+  priceRange?: string;
+  bestFor?: string;
+  mapLink?: string;
+  featured?: boolean;
 }
 
 const CATEGORY_ICONS: Record<string, typeof MapPin> = {
   Restaurants: Utensils,
-  Sports: Trophy,
-  Lounges: Music,
+  "Coffee Shops": Coffee,
+  Lounges: Wine,
+  Nightlife: Moon,
+  Grocery: ShoppingCart,
   Events: Calendar,
   Festivals: Star,
+  Museums: Landmark,
+  "Family Activities": Users,
+  Shopping: ShoppingBag,
+  Transportation: Bus,
+  Parking: Car,
+  "Emergency/Pharmacy": Heart,
+  "Host Favorites": Heart,
+  Sports: Star,
 };
 
 export function ThingsToDoTab({ token }: { token: string }) {
@@ -33,9 +53,6 @@ export function ThingsToDoTab({ token }: { token: string }) {
       .then((r) => r.json())
       .then((data) => {
         setItems(data);
-        if (data.length > 0) {
-          setActiveCategory(null);
-        }
         setLoading(false);
       });
   }, [token]);
@@ -103,8 +120,13 @@ export function ThingsToDoTab({ token }: { token: string }) {
           return (
             <div
               key={item.id}
-              className="bg-white border border-light-gray hover:border-charcoal/30 transition-colors"
+              className="bg-white border border-light-gray hover:border-charcoal/30 transition-colors relative"
             >
+              {item.featured && (
+                <div className="absolute top-3 right-3 z-10 flex items-center gap-1 bg-charcoal text-white px-2.5 py-1 text-[8px] tracking-[0.15em] uppercase font-medium">
+                  <Star size={8} fill="currentColor" /> Featured
+                </div>
+              )}
               {item.imageUrl && (
                 <div className="aspect-[16/9] overflow-hidden">
                   <img
@@ -120,24 +142,64 @@ export function ThingsToDoTab({ token }: { token: string }) {
                   <span className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">
                     {item.category}
                   </span>
+                  {item.priceRange && (
+                    <span className="text-[9px] text-warm-gray/60 ml-auto">
+                      {item.priceRange}
+                    </span>
+                  )}
                 </div>
                 <h3 className="text-sm font-medium text-charcoal mb-1">{item.name}</h3>
                 <p className="text-xs text-warm-gray leading-relaxed">{item.description}</p>
-                {item.address && (
-                  <p className="text-xs text-warm-gray/70 mt-2 flex items-center gap-1">
-                    <MapPin size={10} /> {item.address}
+
+                {item.bestFor && (
+                  <p className="text-[10px] text-warm-gray/70 mt-2 italic">
+                    Best for: {item.bestFor}
                   </p>
                 )}
-                {item.link && (
-                  <a
-                    href={item.link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-[10px] tracking-[0.1em] uppercase text-charcoal font-medium mt-3 hover:text-warm-gray transition-colors"
-                  >
-                    Visit <ExternalLink size={10} />
-                  </a>
-                )}
+
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">
+                  {item.distance && (
+                    <span className="text-[10px] text-warm-gray/60 flex items-center gap-1">
+                      <Navigation size={9} /> {item.distance}
+                    </span>
+                  )}
+                  {item.address && (
+                    <span className="text-[10px] text-warm-gray/60 flex items-center gap-1">
+                      <MapPin size={9} /> {item.address}
+                    </span>
+                  )}
+                  {item.phone && (
+                    <a
+                      href={`tel:${item.phone}`}
+                      className="text-[10px] text-warm-gray/60 flex items-center gap-1 hover:text-charcoal transition-colors"
+                    >
+                      <Phone size={9} /> {item.phone}
+                    </a>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-3 mt-3">
+                  {item.mapLink && (
+                    <a
+                      href={item.mapLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[10px] tracking-[0.1em] uppercase text-charcoal font-medium hover:text-warm-gray transition-colors"
+                    >
+                      <Navigation size={10} /> Directions
+                    </a>
+                  )}
+                  {item.link && (
+                    <a
+                      href={item.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[10px] tracking-[0.1em] uppercase text-charcoal font-medium hover:text-warm-gray transition-colors"
+                    >
+                      Visit <ExternalLink size={10} />
+                    </a>
+                  )}
+                </div>
               </div>
             </div>
           );

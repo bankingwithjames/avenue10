@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import {
   Save,
   Type,
@@ -20,6 +20,25 @@ import {
   Shield,
   Search,
   LayoutGrid,
+  Bold,
+  Italic,
+  Underline,
+  Strikethrough,
+  Heading,
+  List,
+  ListOrdered,
+  Link,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  Palette,
+  Settings,
+  Eye,
+  Send,
+  Clock,
+  ChevronRight,
+  Copy,
+  BookOpen,
 } from "lucide-react";
 
 interface SiteContent {
@@ -60,6 +79,24 @@ interface ListingMediaItem {
   media: MediaItem;
 }
 
+interface FieldStyle {
+  fontSize?: string;
+  fontWeight?: string;
+  color?: string;
+  textAlign?: string;
+}
+
+// --- Content usage map ---
+const contentUsageMap: Record<string, string> = {
+  homepage: "Homepage",
+  amenities: "Homepage Amenities Section",
+  footer: "Site Footer",
+  seo: "All Pages (meta)",
+  policies: "Booking Flow, Listing Pages",
+  terms: "Check-in Portal, Booking Agreement",
+  brand: "Global Site Styles",
+};
+
 const pageLocationLabels: Record<string, string> = {
   "homepage-hero": "Homepage — Hero Background Video",
   "homepage-contact": "Homepage — Contact Section Video",
@@ -74,10 +111,81 @@ const tabs = [
   { key: "homepage", label: "Homepage", icon: Type },
   { key: "amenities", label: "Amenities", icon: LayoutGrid },
   { key: "footer", label: "Footer", icon: FileText },
-  { key: "page-media", label: "Page Media", icon: Film },
-  { key: "listing-gallery", label: "Listing Gallery", icon: ImageIcon },
   { key: "seo", label: "SEO & Meta", icon: Globe },
   { key: "policies", label: "Policies", icon: Shield },
+  { key: "terms", label: "Terms & Conditions", icon: BookOpen },
+  { key: "brand", label: "Brand & Text Styles", icon: Palette },
+  { key: "page-media", label: "Page Media", icon: Film },
+  { key: "listing-gallery", label: "Listing Gallery", icon: ImageIcon },
+];
+
+// --- SEO field definitions ---
+const seoFields = [
+  { key: "seo-meta-title", label: "Meta Title", placeholder: "Avenue10 — Short Term Rental Stays", type: "input" as const },
+  { key: "seo-meta-description", label: "Meta Description", placeholder: "Luxury short-term rental accommodations...", type: "textarea" as const },
+  { key: "seo-og-image", label: "OG Image URL", placeholder: "https://...", type: "input" as const },
+  { key: "seo-canonical-url", label: "Canonical URL", placeholder: "https://avenue10.com", type: "input" as const },
+  { key: "seo-analytics-id", label: "Google Analytics ID", placeholder: "G-XXXXXXXXXX", type: "input" as const },
+  { key: "seo-robots", label: "Robots Setting", placeholder: "", type: "select" as const, options: ["index, follow", "noindex, follow", "index, nofollow", "noindex, nofollow"] },
+];
+
+// --- Policy field definitions ---
+const policyFields = [
+  { key: "policies-cancellation", label: "Cancellation Policy", placeholder: "Describe your cancellation policy..." },
+  { key: "policies-house-rules", label: "House Rules", placeholder: "List your house rules..." },
+  { key: "policies-checkin", label: "Check-in Instructions", placeholder: "Check-in instructions...", note: "Also managed in Check-In Portal" },
+  { key: "policies-pet", label: "Pet Policy", placeholder: "Describe your pet policy..." },
+  { key: "policies-smoking", label: "Smoking Policy", placeholder: "Describe your smoking policy..." },
+  { key: "policies-noise", label: "Noise Policy", placeholder: "Describe your noise/quiet hours policy..." },
+  { key: "policies-damage", label: "Damage Policy", placeholder: "Describe your damage/deposit policy..." },
+];
+
+// --- Terms field definitions ---
+const termsFields = [
+  { key: "terms-rental-agreement", label: "Rental Agreement Terms", placeholder: "Enter your full rental agreement terms...", rows: 8 },
+  { key: "terms-liability-waiver", label: "Liability Waiver", placeholder: "Enter your liability waiver text...", rows: 6 },
+  { key: "terms-payment", label: "Payment Terms", placeholder: "Enter your payment terms...", rows: 5 },
+  { key: "terms-property-rules", label: "Property Rules Agreement", placeholder: "Enter your property rules agreement...", rows: 5 },
+  { key: "terms-privacy", label: "Privacy Policy", placeholder: "Enter your privacy policy text...", rows: 6 },
+];
+
+// --- Brand field definitions ---
+const brandColorFields = [
+  { key: "brand-primary-color", label: "Primary Color", defaultVal: "#1a1a1a" },
+  { key: "brand-secondary-color", label: "Secondary Color", defaultVal: "#6b7280" },
+  { key: "brand-accent-color", label: "Accent Color", defaultVal: "#b8860b" },
+  { key: "brand-text-color", label: "Text Color", defaultVal: "#1f2937" },
+  { key: "brand-background-color", label: "Background Color", defaultVal: "#faf9f6" },
+];
+
+const brandTypographyFields = [
+  { key: "brand-heading-font", label: "Heading Font Family", type: "select" as const, options: ["Playfair Display", "Georgia", "Times New Roman", "serif"] },
+  { key: "brand-body-font", label: "Body Font Family", type: "select" as const, options: ["Inter", "system-ui", "sans-serif", "Lato", "Open Sans"] },
+  { key: "brand-base-font-size", label: "Base Font Size", type: "input" as const, placeholder: "16px" },
+  { key: "brand-line-height", label: "Line Height", type: "input" as const, placeholder: "1.6" },
+];
+
+const brandSpacingFields = [
+  { key: "brand-section-padding", label: "Section Padding", placeholder: "64px" },
+  { key: "brand-content-max-width", label: "Content Max Width", placeholder: "1200px" },
+  { key: "brand-letter-spacing", label: "Letter Spacing", placeholder: "0.02em" },
+];
+
+// --- Sync mapping from policies to terms ---
+const policySyncMap: Record<string, string> = {
+  "policies-house-rules": "terms-property-rules",
+  "policies-cancellation": "terms-payment",
+  "policies-damage": "terms-liability-waiver",
+};
+
+// --- Font size / weight options ---
+const fontSizeOptions = ["12px", "14px", "16px", "18px", "20px", "24px", "32px", "48px"];
+const fontWeightOptions = [
+  { label: "Light", value: "300" },
+  { label: "Normal", value: "400" },
+  { label: "Medium", value: "500" },
+  { label: "Semi-Bold", value: "600" },
+  { label: "Bold", value: "700" },
 ];
 
 export default function AdminContentPage() {
@@ -97,6 +205,12 @@ export default function AdminContentPage() {
   const [showGalleryPicker, setShowGalleryPicker] = useState(false);
   const [newRoom, setNewRoom] = useState("");
   const [newLabel, setNewLabel] = useState("");
+  const [expandedStyles, setExpandedStyles] = useState<Record<string, boolean>>({});
+  const [showAiDropdown, setShowAiDropdown] = useState(false);
+  const [publishStatus, setPublishStatus] = useState<"draft" | "published">("draft");
+  const [lastPublishedAt, setLastPublishedAt] = useState<Date | null>(null);
+
+  const textareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
 
   // Unsaved changes tracking
   const unsavedChanges = useMemo(() => {
@@ -108,11 +222,6 @@ export default function AdminContentPage() {
   const hasUnsavedChanges = unsavedChanges.length > 0;
 
   // Stats
-  const uniqueSections = useMemo(
-    () => [...new Set(content.map((c) => c.section))].filter((s) => s !== "checkin"),
-    [content]
-  );
-
   const sectionFieldCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     content.forEach((c) => {
@@ -135,6 +244,15 @@ export default function AdminContentPage() {
     const vals = Object.fromEntries(contentData.map((c: SiteContent) => [c.key, c.value]));
     setEditedValues(vals);
     setOriginalValues({ ...vals });
+
+    // Load publish status
+    if (vals["cms-publish-status"]) {
+      setPublishStatus(vals["cms-publish-status"] as "draft" | "published");
+    }
+    if (vals["cms-last-published"]) {
+      setLastPublishedAt(new Date(vals["cms-last-published"]));
+    }
+
     setAllMedia(await mediaRes.json());
     setPageMedia(await pageMediaRes.json());
     const listingsData = await listingsRes.json();
@@ -157,18 +275,38 @@ export default function AdminContentPage() {
     setListingGallery(await res.json());
   }
 
-  async function saveContent() {
+  async function saveContent(markPublished = false) {
     setSavingContent(true);
-    const items = Object.entries(editedValues).map(([key, value]) => ({ key, value }));
+
+    const updatedValues = { ...editedValues };
+
+    if (markPublished) {
+      updatedValues["cms-publish-status"] = "published";
+      updatedValues["cms-last-published"] = new Date().toISOString();
+    } else if (hasUnsavedChanges) {
+      updatedValues["cms-publish-status"] = "draft";
+    }
+
+    const items = Object.entries(updatedValues).map(([key, value]) => ({ key, value }));
     await fetch("/api/admin/content", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ items }),
     });
+
     setSavingContent(false);
     setSavedContent(true);
     setLastSavedAt(new Date());
-    setOriginalValues({ ...editedValues });
+    setEditedValues(updatedValues);
+    setOriginalValues({ ...updatedValues });
+
+    if (markPublished) {
+      setPublishStatus("published");
+      setLastPublishedAt(new Date());
+    } else if (hasUnsavedChanges) {
+      setPublishStatus("draft");
+    }
+
     setTimeout(() => setSavedContent(false), 3000);
   }
 
@@ -218,10 +356,229 @@ export default function AdminContentPage() {
     loadListingGallery();
   }
 
+  function updateValue(key: string, value: string) {
+    setEditedValues((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function getFieldStyle(key: string): FieldStyle {
+    const styleKey = `${key}-style`;
+    const raw = editedValues[styleKey];
+    if (raw) {
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  }
+
+  function setFieldStyle(key: string, style: FieldStyle) {
+    const styleKey = `${key}-style`;
+    updateValue(styleKey, JSON.stringify(style));
+  }
+
+  function toggleStylePanel(key: string) {
+    setExpandedStyles((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  // --- Rich text formatting helpers ---
+  function insertFormatting(fieldKey: string, prefix: string, suffix: string) {
+    const textarea = textareaRefs.current[fieldKey];
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const val = editedValues[fieldKey] || "";
+    const selectedText = val.substring(start, end);
+    const newVal = val.substring(0, start) + prefix + selectedText + suffix + val.substring(end);
+    updateValue(fieldKey, newVal);
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + prefix.length, end + prefix.length);
+    }, 0);
+  }
+
+  function insertLinePrefix(fieldKey: string, prefix: string) {
+    const textarea = textareaRefs.current[fieldKey];
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const val = editedValues[fieldKey] || "";
+    const lineStart = val.lastIndexOf("\n", start - 1) + 1;
+    const newVal = val.substring(0, lineStart) + prefix + val.substring(lineStart);
+    updateValue(fieldKey, newVal);
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + prefix.length, start + prefix.length);
+    }, 0);
+  }
+
+  // --- Usage badge for a field ---
+  function getUsageBadge(key: string): string | null {
+    const section = key.split("-")[0];
+    return contentUsageMap[section] || null;
+  }
+
+  // --- SEO score helpers ---
+  function getSeoTitleScore(len: number): { label: string; color: string } {
+    if (len === 0) return { label: "Empty", color: "text-warm-gray" };
+    if (len >= 50 && len <= 60) return { label: "Optimal", color: "text-green-600" };
+    if (len >= 40 && len <= 70) return { label: "Acceptable", color: "text-amber-600" };
+    return { label: len < 40 ? "Too Short" : "Too Long", color: "text-red-500" };
+  }
+
+  function getSeoDescScore(len: number): { label: string; color: string } {
+    if (len === 0) return { label: "Empty", color: "text-warm-gray" };
+    if (len >= 150 && len <= 160) return { label: "Optimal", color: "text-green-600" };
+    if (len >= 120 && len <= 180) return { label: "Acceptable", color: "text-amber-600" };
+    return { label: len < 120 ? "Too Short" : "Too Long", color: "text-red-500" };
+  }
+
   const inputClass =
     "w-full bg-transparent border border-light-gray text-charcoal text-sm px-3 py-2.5 outline-none focus:border-charcoal/40 transition-colors";
   const labelClass = "text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium mb-1 block";
 
+  // =============================================
+  // RICH TEXT TOOLBAR
+  // =============================================
+  function RichTextToolbar({ fieldKey }: { fieldKey: string }) {
+    const btnClass = "p-1.5 text-warm-gray hover:text-charcoal hover:bg-cream border border-transparent hover:border-light-gray transition rounded-sm";
+    return (
+      <div className="flex items-center gap-0.5 flex-wrap px-2 py-1.5 bg-cream/50 border border-light-gray border-b-0">
+        <button type="button" title="Bold" className={btnClass} onClick={() => insertFormatting(fieldKey, "**", "**")}>
+          <Bold size={13} />
+        </button>
+        <button type="button" title="Italic" className={btnClass} onClick={() => insertFormatting(fieldKey, "*", "*")}>
+          <Italic size={13} />
+        </button>
+        <button type="button" title="Underline" className={btnClass} onClick={() => insertFormatting(fieldKey, "<u>", "</u>")}>
+          <Underline size={13} />
+        </button>
+        <button type="button" title="Strikethrough" className={btnClass} onClick={() => insertFormatting(fieldKey, "~~", "~~")}>
+          <Strikethrough size={13} />
+        </button>
+        <span className="w-px h-4 bg-light-gray mx-1" />
+        <button type="button" title="Heading" className={btnClass} onClick={() => insertLinePrefix(fieldKey, "## ")}>
+          <Heading size={13} />
+        </button>
+        <button type="button" title="Bullet List" className={btnClass} onClick={() => insertLinePrefix(fieldKey, "- ")}>
+          <List size={13} />
+        </button>
+        <button type="button" title="Numbered List" className={btnClass} onClick={() => insertLinePrefix(fieldKey, "1. ")}>
+          <ListOrdered size={13} />
+        </button>
+        <button type="button" title="Link" className={btnClass} onClick={() => insertFormatting(fieldKey, "[", "](url)")}>
+          <Link size={13} />
+        </button>
+        <span className="w-px h-4 bg-light-gray mx-1" />
+        <button type="button" title="Align Left" className={btnClass} onClick={() => insertLinePrefix(fieldKey, "{: .text-left} ")}>
+          <AlignLeft size={13} />
+        </button>
+        <button type="button" title="Align Center" className={btnClass} onClick={() => insertLinePrefix(fieldKey, "{: .text-center} ")}>
+          <AlignCenter size={13} />
+        </button>
+        <button type="button" title="Align Right" className={btnClass} onClick={() => insertLinePrefix(fieldKey, "{: .text-right} ")}>
+          <AlignRight size={13} />
+        </button>
+      </div>
+    );
+  }
+
+  // =============================================
+  // FIELD STYLE CONTROLS
+  // =============================================
+  function FieldStyleControls({ fieldKey }: { fieldKey: string }) {
+    const style = getFieldStyle(fieldKey);
+    const isOpen = expandedStyles[fieldKey] || false;
+
+    function update(patch: Partial<FieldStyle>) {
+      setFieldStyle(fieldKey, { ...style, ...patch });
+    }
+
+    return (
+      <div className="mt-1">
+        <button
+          type="button"
+          onClick={() => toggleStylePanel(fieldKey)}
+          className="flex items-center gap-1 text-[8px] tracking-[0.1em] uppercase text-warm-gray hover:text-charcoal transition"
+        >
+          <Settings size={10} />
+          Style
+          {isOpen ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+        </button>
+        {isOpen && (
+          <div className="mt-2 p-3 bg-cream/50 border border-light-gray grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div>
+              <label className={labelClass}>Font Size</label>
+              <select
+                value={style.fontSize || ""}
+                onChange={(e) => update({ fontSize: e.target.value })}
+                className="w-full bg-white border border-light-gray text-xs px-2 py-1.5 outline-none focus:border-charcoal/40"
+              >
+                <option value="">Default</option>
+                {fontSizeOptions.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={labelClass}>Font Weight</label>
+              <select
+                value={style.fontWeight || ""}
+                onChange={(e) => update({ fontWeight: e.target.value })}
+                className="w-full bg-white border border-light-gray text-xs px-2 py-1.5 outline-none focus:border-charcoal/40"
+              >
+                <option value="">Default</option>
+                {fontWeightOptions.map((w) => (
+                  <option key={w.value} value={w.value}>{w.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={labelClass}>Text Color</label>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="color"
+                  value={style.color || "#1a1a1a"}
+                  onChange={(e) => update({ color: e.target.value })}
+                  className="w-8 h-8 border border-light-gray cursor-pointer p-0"
+                />
+                <input
+                  type="text"
+                  value={style.color || ""}
+                  onChange={(e) => update({ color: e.target.value })}
+                  placeholder="#1a1a1a"
+                  className="flex-1 bg-white border border-light-gray text-xs px-2 py-1.5 outline-none focus:border-charcoal/40"
+                />
+              </div>
+            </div>
+            <div>
+              <label className={labelClass}>Text Align</label>
+              <div className="flex gap-1">
+                {(["left", "center", "right", "justify"] as const).map((a) => (
+                  <button
+                    key={a}
+                    type="button"
+                    onClick={() => update({ textAlign: a })}
+                    className={`flex-1 text-[9px] uppercase py-1.5 border transition ${
+                      style.textAlign === a
+                        ? "bg-charcoal text-white border-charcoal"
+                        : "bg-white text-warm-gray border-light-gray hover:border-charcoal/40"
+                    }`}
+                  >
+                    {a.charAt(0).toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // =============================================
+  // MEDIA PICKER MODAL (unchanged)
+  // =============================================
   function MediaPickerModal({
     onSelect,
     onClose,
@@ -294,7 +651,9 @@ export default function AdminContentPage() {
     );
   }
 
-  // --- Content Section Tab Renderer ---
+  // =============================================
+  // CONTENT SECTION TAB RENDERER (enhanced)
+  // =============================================
   function renderContentSection(sectionName: string) {
     const sectionItems = content.filter((c) => c.section === sectionName);
     if (sectionItems.length === 0) {
@@ -317,42 +676,60 @@ export default function AdminContentPage() {
           </span>
         </div>
         <div className="px-5 pb-5 pt-4 space-y-5">
-          {sectionItems.map((item) => (
-            <div key={item.key}>
-              <div className="flex items-center justify-between mb-1">
-                <label className={labelClass}>{item.label}</label>
-                <span className="text-[8px] text-warm-gray/50 tabular-nums">
-                  {(editedValues[item.key] || "").length} chars
-                </span>
+          {sectionItems.map((item) => {
+            const isTextarea =
+              (editedValues[item.key] || "").includes("\n") ||
+              (editedValues[item.key] || "").length > 100;
+            const usage = getUsageBadge(item.key);
+
+            return (
+              <div key={item.key}>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <label className={labelClass}>{item.label}</label>
+                    {usage && (
+                      <span className="text-[7px] tracking-[0.08em] uppercase bg-cream text-warm-gray border border-light-gray px-1.5 py-0.5">
+                        Used on: {usage}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[8px] text-warm-gray/50 tabular-nums">
+                    {(editedValues[item.key] || "").length} chars
+                  </span>
+                </div>
+                {isTextarea ? (
+                  <>
+                    <RichTextToolbar fieldKey={item.key} />
+                    <textarea
+                      ref={(el) => { textareaRefs.current[item.key] = el; }}
+                      rows={3}
+                      value={editedValues[item.key] || ""}
+                      onChange={(e) => updateValue(item.key, e.target.value)}
+                      className={`${inputClass} resize-none`}
+                    />
+                  </>
+                ) : (
+                  <input
+                    value={editedValues[item.key] || ""}
+                    onChange={(e) => updateValue(item.key, e.target.value)}
+                    className={inputClass}
+                  />
+                )}
+                <div className="flex items-center justify-between">
+                  <span className="text-[8px] text-warm-gray/60 mt-0.5 block">Key: {item.key}</span>
+                </div>
+                <FieldStyleControls fieldKey={item.key} />
               </div>
-              {(editedValues[item.key] || "").includes("\n") ||
-              (editedValues[item.key] || "").length > 100 ? (
-                <textarea
-                  rows={3}
-                  value={editedValues[item.key] || ""}
-                  onChange={(e) =>
-                    setEditedValues({ ...editedValues, [item.key]: e.target.value })
-                  }
-                  className={`${inputClass} resize-none`}
-                />
-              ) : (
-                <input
-                  value={editedValues[item.key] || ""}
-                  onChange={(e) =>
-                    setEditedValues({ ...editedValues, [item.key]: e.target.value })
-                  }
-                  className={inputClass}
-                />
-              )}
-              <span className="text-[8px] text-warm-gray/60 mt-0.5 block">Key: {item.key}</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     );
   }
 
-  // --- Page Media Tab ---
+  // =============================================
+  // PAGE MEDIA TAB (unchanged)
+  // =============================================
   function renderPageMediaTab() {
     return (
       <div className="bg-white border border-light-gray">
@@ -414,7 +791,9 @@ export default function AdminContentPage() {
     );
   }
 
-  // --- Listing Gallery Tab ---
+  // =============================================
+  // LISTING GALLERY TAB (unchanged)
+  // =============================================
   function renderListingGalleryTab() {
     return (
       <div className="bg-white border border-light-gray">
@@ -559,13 +938,27 @@ export default function AdminContentPage() {
     );
   }
 
-  // --- SEO & Meta Tab ---
+  // =============================================
+  // SEO & META TAB (activated)
+  // =============================================
   function renderSeoTab() {
-    const comingSoonBadge = (
-      <span className="text-[8px] tracking-[0.1em] uppercase bg-amber-50 text-amber-600 border border-amber-200 px-2 py-0.5 font-medium">
-        Coming Soon
-      </span>
-    );
+    const titleLen = (editedValues["seo-meta-title"] || "").length;
+    const descLen = (editedValues["seo-meta-description"] || "").length;
+    const titleScore = getSeoTitleScore(titleLen);
+    const descScore = getSeoDescScore(descLen);
+
+    // Compute overall SEO score
+    let seoPoints = 0;
+    if (titleLen >= 50 && titleLen <= 60) seoPoints += 25;
+    else if (titleLen >= 40 && titleLen <= 70) seoPoints += 15;
+    if (descLen >= 150 && descLen <= 160) seoPoints += 25;
+    else if (descLen >= 120 && descLen <= 180) seoPoints += 15;
+    if ((editedValues["seo-og-image"] || "").length > 0) seoPoints += 15;
+    if ((editedValues["seo-canonical-url"] || "").length > 0) seoPoints += 15;
+    if ((editedValues["seo-analytics-id"] || "").length > 0) seoPoints += 10;
+    if ((editedValues["seo-robots"] || "").length > 0) seoPoints += 10;
+
+    const seoScoreColor = seoPoints >= 80 ? "text-green-600" : seoPoints >= 50 ? "text-amber-600" : "text-red-500";
 
     return (
       <div className="bg-white border border-light-gray">
@@ -574,99 +967,104 @@ export default function AdminContentPage() {
             <Search size={14} className="text-warm-gray" />
             <span className="text-xs font-medium text-charcoal">SEO & Meta Settings</span>
           </div>
-          {comingSoonBadge}
+          <div className="flex items-center gap-3">
+            <span className="text-[7px] tracking-[0.08em] uppercase bg-cream text-warm-gray border border-light-gray px-1.5 py-0.5">
+              Used on: All Pages (meta)
+            </span>
+            <span className={`text-xs font-medium ${seoScoreColor}`}>
+              SEO Score: {seoPoints}/100
+            </span>
+          </div>
         </div>
         <div className="px-5 pb-5 pt-4 space-y-5">
-          {/* Meta Title */}
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <label className={labelClass}>Meta Title</label>
-              {comingSoonBadge}
-            </div>
-            <input
-              placeholder="Avenue10 — Short Term Rental Stays"
-              className={`${inputClass} opacity-60`}
-              disabled
-            />
-          </div>
+          {seoFields.map((field) => {
+            const val = editedValues[field.key] || "";
+            const len = val.length;
 
-          {/* Meta Description */}
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <label className={labelClass}>Meta Description</label>
-              {comingSoonBadge}
-            </div>
-            <textarea
-              rows={3}
-              placeholder="Luxury short-term rental accommodations..."
-              className={`${inputClass} resize-none opacity-60`}
-              disabled
-            />
-          </div>
+            return (
+              <div key={field.key}>
+                <div className="flex items-center justify-between mb-1">
+                  <label className={labelClass}>{field.label}</label>
+                  <div className="flex items-center gap-2">
+                    {field.key === "seo-meta-title" && (
+                      <span className={`text-[8px] font-medium ${titleScore.color}`}>
+                        {titleScore.label} ({len}/60)
+                      </span>
+                    )}
+                    {field.key === "seo-meta-description" && (
+                      <span className={`text-[8px] font-medium ${descScore.color}`}>
+                        {descScore.label} ({len}/160)
+                      </span>
+                    )}
+                    {field.key !== "seo-meta-title" && field.key !== "seo-meta-description" && (
+                      <span className="text-[8px] text-warm-gray/50 tabular-nums">{len} chars</span>
+                    )}
+                  </div>
+                </div>
 
-          {/* OG Image */}
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <label className={labelClass}>OG Image URL</label>
-              {comingSoonBadge}
-            </div>
-            <input placeholder="https://..." className={`${inputClass} opacity-60`} disabled />
-          </div>
+                {field.type === "textarea" ? (
+                  <>
+                    <RichTextToolbar fieldKey={field.key} />
+                    <textarea
+                      ref={(el) => { textareaRefs.current[field.key] = el; }}
+                      rows={3}
+                      value={val}
+                      onChange={(e) => updateValue(field.key, e.target.value)}
+                      placeholder={field.placeholder}
+                      className={`${inputClass} resize-none`}
+                    />
+                  </>
+                ) : field.type === "select" ? (
+                  <select
+                    value={val}
+                    onChange={(e) => updateValue(field.key, e.target.value)}
+                    className={inputClass}
+                  >
+                    <option value="">Select...</option>
+                    {field.options?.map((opt) => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    value={val}
+                    onChange={(e) => updateValue(field.key, e.target.value)}
+                    placeholder={field.placeholder}
+                    className={inputClass}
+                  />
+                )}
 
-          {/* Canonical URL */}
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <label className={labelClass}>Canonical URL</label>
-              {comingSoonBadge}
-            </div>
-            <input
-              placeholder="https://avenue10.com"
-              className={`${inputClass} opacity-60`}
-              disabled
-            />
-          </div>
+                {/* SEO title character bar */}
+                {field.key === "seo-meta-title" && (
+                  <div className="mt-1.5 h-1.5 bg-light-gray overflow-hidden">
+                    <div
+                      className={`h-full transition-all ${
+                        len >= 50 && len <= 60 ? "bg-green-500" : len >= 40 && len <= 70 ? "bg-amber-400" : "bg-red-400"
+                      }`}
+                      style={{ width: `${Math.min((len / 70) * 100, 100)}%` }}
+                    />
+                  </div>
+                )}
+                {field.key === "seo-meta-description" && (
+                  <div className="mt-1.5 h-1.5 bg-light-gray overflow-hidden">
+                    <div
+                      className={`h-full transition-all ${
+                        len >= 150 && len <= 160 ? "bg-green-500" : len >= 120 && len <= 180 ? "bg-amber-400" : "bg-red-400"
+                      }`}
+                      style={{ width: `${Math.min((len / 200) * 100, 100)}%` }}
+                    />
+                  </div>
+                )}
 
-          {/* Google Analytics */}
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <label className={labelClass}>Google Analytics ID</label>
-              {comingSoonBadge}
-            </div>
-            <input
-              placeholder="G-XXXXXXXXXX"
-              className={`${inputClass} opacity-60`}
-              disabled
-            />
-          </div>
-
-          {/* Robots */}
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <label className={labelClass}>Robots.txt Setting</label>
-              {comingSoonBadge}
-            </div>
-            <select className={`${inputClass} opacity-60`} disabled>
-              <option>Index & Follow</option>
-              <option>Noindex</option>
-              <option>Nofollow</option>
-            </select>
-          </div>
-
-          {/* Sitemap */}
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <label className={labelClass}>Sitemap Enabled</label>
-              {comingSoonBadge}
-            </div>
-            <label className="flex items-center gap-2 opacity-60">
-              <input type="checkbox" checked disabled className="accent-charcoal" />
-              <span className="text-sm text-charcoal">Generate sitemap.xml</span>
-            </label>
-          </div>
+                <span className="text-[8px] text-warm-gray/60 mt-0.5 block">Key: {field.key}</span>
+                <FieldStyleControls fieldKey={field.key} />
+              </div>
+            );
+          })}
 
           <div className="border-t border-light-gray pt-4 mt-4">
             <p className="text-[10px] text-warm-gray leading-relaxed">
-              SEO settings will be applied to all public pages when connected.
+              SEO settings are applied to all public pages. Aim for green indicators on title and description length for best search performance.
             </p>
           </div>
         </div>
@@ -674,28 +1072,10 @@ export default function AdminContentPage() {
     );
   }
 
-  // --- Policies Tab ---
+  // =============================================
+  // POLICIES TAB (activated)
+  // =============================================
   function renderPoliciesTab() {
-    const comingSoonBadge = (
-      <span className="text-[8px] tracking-[0.1em] uppercase bg-amber-50 text-amber-600 border border-amber-200 px-2 py-0.5 font-medium">
-        Coming Soon
-      </span>
-    );
-
-    const policies = [
-      { label: "Cancellation Policy", placeholder: "Describe your cancellation policy..." },
-      { label: "House Rules", placeholder: "List your house rules..." },
-      {
-        label: "Check-in Instructions",
-        placeholder: "Check-in instructions...",
-        note: "Managed in Check-In Portal",
-      },
-      { label: "Pet Policy", placeholder: "Describe your pet policy..." },
-      { label: "Smoking Policy", placeholder: "Describe your smoking policy..." },
-      { label: "Noise Policy", placeholder: "Describe your noise/quiet hours policy..." },
-      { label: "Damage Policy", placeholder: "Describe your damage/deposit policy..." },
-    ];
-
     return (
       <div className="bg-white border border-light-gray">
         <div className="px-5 py-4 border-b border-light-gray flex items-center justify-between">
@@ -703,31 +1083,41 @@ export default function AdminContentPage() {
             <Shield size={14} className="text-warm-gray" />
             <span className="text-xs font-medium text-charcoal">Property Policies</span>
           </div>
-          {comingSoonBadge}
+          <span className="text-[7px] tracking-[0.08em] uppercase bg-cream text-warm-gray border border-light-gray px-1.5 py-0.5">
+            Used on: Booking Flow, Listing Pages
+          </span>
         </div>
         <div className="px-5 pb-5 pt-4 space-y-5">
-          {policies.map((policy) => (
-            <div key={policy.label}>
-              <div className="flex items-center gap-2 mb-1">
-                <label className={labelClass}>{policy.label}</label>
-                {comingSoonBadge}
+          {policyFields.map((policy) => {
+            const val = editedValues[policy.key] || "";
+            return (
+              <div key={policy.key}>
+                <div className="flex items-center justify-between mb-1">
+                  <label className={labelClass}>{policy.label}</label>
+                  <span className="text-[8px] text-warm-gray/50 tabular-nums">{val.length} chars</span>
+                </div>
+                <RichTextToolbar fieldKey={policy.key} />
+                <textarea
+                  ref={(el) => { textareaRefs.current[policy.key] = el; }}
+                  rows={4}
+                  value={val}
+                  onChange={(e) => updateValue(policy.key, e.target.value)}
+                  placeholder={policy.placeholder}
+                  className={`${inputClass} resize-none`}
+                />
+                {policy.note && (
+                  <span className="text-[8px] text-warm-gray/60 mt-0.5 block italic">
+                    {policy.note}
+                  </span>
+                )}
+                <span className="text-[8px] text-warm-gray/60 mt-0.5 block">Key: {policy.key}</span>
+                <FieldStyleControls fieldKey={policy.key} />
               </div>
-              <textarea
-                rows={3}
-                placeholder={policy.placeholder}
-                className={`${inputClass} resize-none opacity-60`}
-                disabled
-              />
-              {policy.note && (
-                <span className="text-[8px] text-warm-gray/60 mt-0.5 block italic">
-                  {policy.note}
-                </span>
-              )}
-            </div>
-          ))}
+            );
+          })}
           <div className="border-t border-light-gray pt-4 mt-4">
             <p className="text-[10px] text-warm-gray leading-relaxed">
-              Policy content will display on listing pages and booking confirmations.
+              Policy content displays on listing pages and booking confirmations.
             </p>
           </div>
         </div>
@@ -735,7 +1125,244 @@ export default function AdminContentPage() {
     );
   }
 
-  // --- Render active tab content ---
+  // =============================================
+  // TERMS & CONDITIONS TAB (new)
+  // =============================================
+  function renderTermsTab() {
+    function syncFromPolicies() {
+      if (!confirm("This will copy content from matching Policies fields into Terms & Conditions fields. Existing Terms content will be overwritten. Continue?")) {
+        return;
+      }
+      const updated = { ...editedValues };
+      Object.entries(policySyncMap).forEach(([policyKey, termsKey]) => {
+        if (updated[policyKey]) {
+          updated[termsKey] = updated[policyKey];
+        }
+      });
+      setEditedValues(updated);
+    }
+
+    return (
+      <div className="bg-white border border-light-gray">
+        <div className="px-5 py-4 border-b border-light-gray flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <BookOpen size={14} className="text-warm-gray" />
+            <span className="text-xs font-medium text-charcoal">Terms & Conditions</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-[7px] tracking-[0.08em] uppercase bg-cream text-warm-gray border border-light-gray px-1.5 py-0.5">
+              Used on: Check-in Portal, Booking Agreement
+            </span>
+            <button
+              onClick={syncFromPolicies}
+              className="flex items-center gap-1.5 text-[9px] tracking-[0.1em] uppercase text-charcoal border border-light-gray px-3 py-1.5 hover:bg-cream transition font-medium"
+            >
+              <Copy size={11} /> Sync from Policies
+            </button>
+          </div>
+        </div>
+        <div className="px-5 pb-5 pt-4 space-y-5">
+          {termsFields.map((field) => {
+            const val = editedValues[field.key] || "";
+            return (
+              <div key={field.key}>
+                <div className="flex items-center justify-between mb-1">
+                  <label className={labelClass}>{field.label}</label>
+                  <span className="text-[8px] text-warm-gray/50 tabular-nums">{val.length} chars</span>
+                </div>
+                <RichTextToolbar fieldKey={field.key} />
+                <textarea
+                  ref={(el) => { textareaRefs.current[field.key] = el; }}
+                  rows={field.rows}
+                  value={val}
+                  onChange={(e) => updateValue(field.key, e.target.value)}
+                  placeholder={field.placeholder}
+                  className={`${inputClass} resize-none`}
+                />
+                <span className="text-[8px] text-warm-gray/60 mt-0.5 block">Key: {field.key}</span>
+                <FieldStyleControls fieldKey={field.key} />
+              </div>
+            );
+          })}
+          <div className="border-t border-light-gray pt-4 mt-4">
+            <p className="text-[10px] text-warm-gray leading-relaxed">
+              Terms content is shown during the booking agreement flow and in the check-in portal. Use &quot;Sync from Policies&quot; to pre-populate from your policy content.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // =============================================
+  // BRAND & TEXT STYLES TAB (new)
+  // =============================================
+  function renderBrandTab() {
+    return (
+      <div className="space-y-5">
+        {/* Brand Colors */}
+        <div className="bg-white border border-light-gray">
+          <div className="px-5 py-4 border-b border-light-gray flex items-center gap-2">
+            <Palette size={14} className="text-warm-gray" />
+            <span className="text-xs font-medium text-charcoal">Brand Colors</span>
+          </div>
+          <div className="px-5 pb-5 pt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {brandColorFields.map((field) => {
+              const val = editedValues[field.key] || field.defaultVal;
+              return (
+                <div key={field.key}>
+                  <label className={labelClass}>{field.label}</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={val}
+                      onChange={(e) => updateValue(field.key, e.target.value)}
+                      className="w-10 h-10 border border-light-gray cursor-pointer p-0 shrink-0"
+                    />
+                    <input
+                      type="text"
+                      value={val}
+                      onChange={(e) => updateValue(field.key, e.target.value)}
+                      className={`${inputClass} flex-1`}
+                    />
+                  </div>
+                  <div
+                    className="mt-1.5 h-6 border border-light-gray"
+                    style={{ backgroundColor: val }}
+                  />
+                  <span className="text-[8px] text-warm-gray/60 mt-0.5 block">Key: {field.key}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Typography */}
+        <div className="bg-white border border-light-gray">
+          <div className="px-5 py-4 border-b border-light-gray flex items-center gap-2">
+            <Type size={14} className="text-warm-gray" />
+            <span className="text-xs font-medium text-charcoal">Typography</span>
+          </div>
+          <div className="px-5 pb-5 pt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {brandTypographyFields.map((field) => {
+              const val = editedValues[field.key] || "";
+              return (
+                <div key={field.key}>
+                  <label className={labelClass}>{field.label}</label>
+                  {field.type === "select" ? (
+                    <select
+                      value={val}
+                      onChange={(e) => updateValue(field.key, e.target.value)}
+                      className={inputClass}
+                    >
+                      <option value="">Default</option>
+                      {field.options?.map((opt) => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      value={val}
+                      onChange={(e) => updateValue(field.key, e.target.value)}
+                      placeholder={field.placeholder}
+                      className={inputClass}
+                    />
+                  )}
+                  <span className="text-[8px] text-warm-gray/60 mt-0.5 block">Key: {field.key}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Spacing */}
+        <div className="bg-white border border-light-gray">
+          <div className="px-5 py-4 border-b border-light-gray flex items-center gap-2">
+            <Settings size={14} className="text-warm-gray" />
+            <span className="text-xs font-medium text-charcoal">Spacing Presets</span>
+          </div>
+          <div className="px-5 pb-5 pt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {brandSpacingFields.map((field) => {
+              const val = editedValues[field.key] || "";
+              return (
+                <div key={field.key}>
+                  <label className={labelClass}>{field.label}</label>
+                  <input
+                    value={val}
+                    onChange={(e) => updateValue(field.key, e.target.value)}
+                    placeholder={field.placeholder}
+                    className={inputClass}
+                  />
+                  <span className="text-[8px] text-warm-gray/60 mt-0.5 block">Key: {field.key}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Preview Panel */}
+        <div className="bg-white border border-light-gray">
+          <div className="px-5 py-4 border-b border-light-gray flex items-center gap-2">
+            <Eye size={14} className="text-warm-gray" />
+            <span className="text-xs font-medium text-charcoal">Live Preview</span>
+          </div>
+          <div className="p-5">
+            <div
+              className="p-8 border border-light-gray"
+              style={{
+                backgroundColor: editedValues["brand-background-color"] || "#faf9f6",
+                color: editedValues["brand-text-color"] || "#1f2937",
+                maxWidth: editedValues["brand-content-max-width"] || "100%",
+                letterSpacing: editedValues["brand-letter-spacing"] || "normal",
+              }}
+            >
+              <h2
+                style={{
+                  fontFamily: editedValues["brand-heading-font"] || "Playfair Display, serif",
+                  fontSize: "28px",
+                  fontWeight: 400,
+                  color: editedValues["brand-primary-color"] || "#1a1a1a",
+                  marginBottom: "12px",
+                }}
+              >
+                Sample Heading Text
+              </h2>
+              <p
+                style={{
+                  fontFamily: editedValues["brand-body-font"] || "Inter, system-ui, sans-serif",
+                  fontSize: editedValues["brand-base-font-size"] || "16px",
+                  lineHeight: editedValues["brand-line-height"] || "1.6",
+                  color: editedValues["brand-secondary-color"] || "#6b7280",
+                }}
+              >
+                This is a preview of your body text with the current brand settings applied.
+                Adjust the colors, fonts, and spacing above to see changes reflected here in real time.
+              </p>
+              <span
+                style={{
+                  display: "inline-block",
+                  marginTop: "16px",
+                  padding: "8px 20px",
+                  backgroundColor: editedValues["brand-accent-color"] || "#b8860b",
+                  color: "#ffffff",
+                  fontFamily: editedValues["brand-body-font"] || "Inter, system-ui, sans-serif",
+                  fontSize: "12px",
+                  letterSpacing: "0.1em",
+                  textTransform: "uppercase" as const,
+                }}
+              >
+                Sample Button
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // =============================================
+  // RENDER ACTIVE TAB
+  // =============================================
   function renderTabContent() {
     switch (activeTab) {
       case "homepage":
@@ -752,48 +1379,113 @@ export default function AdminContentPage() {
         return renderSeoTab();
       case "policies":
         return renderPoliciesTab();
+      case "terms":
+        return renderTermsTab();
+      case "brand":
+        return renderBrandTab();
       default:
         return null;
     }
   }
 
+  // =============================================
+  // MAIN RETURN
+  // =============================================
   return (
     <div>
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <h1 className="font-serif text-2xl text-charcoal font-light">Website Content</h1>
-        <div className="flex items-center gap-2">
-          {/* AI Assist Button */}
-          <button
-            onClick={() =>
-              alert(
-                "AI copy assistant coming soon — will help generate listing descriptions, amenity highlights, and SEO content."
-              )
-            }
-            className="flex items-center gap-1.5 border border-light-gray text-charcoal px-4 py-2.5 text-[10px] tracking-[0.12em] uppercase font-medium hover:bg-cream transition"
+        <div className="flex items-center gap-3">
+          <h1 className="font-serif text-2xl text-charcoal font-light">Website Content</h1>
+          {/* Publish status badge */}
+          <span
+            className={`flex items-center gap-1.5 text-[9px] tracking-[0.1em] uppercase font-medium px-2.5 py-1 border ${
+              publishStatus === "published"
+                ? "bg-green-50 text-green-700 border-green-200"
+                : "bg-amber-50 text-amber-700 border-amber-200"
+            }`}
           >
-            <Sparkles size={13} /> AI Assist
-          </button>
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                publishStatus === "published" ? "bg-green-500" : "bg-amber-400"
+              }`}
+            />
+            {publishStatus === "published" ? "Published" : "Draft"}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* AI Assist Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setShowAiDropdown(!showAiDropdown)}
+              className="flex items-center gap-1.5 border border-light-gray text-charcoal px-4 py-2.5 text-[10px] tracking-[0.12em] uppercase font-medium hover:bg-cream transition"
+            >
+              <Sparkles size={13} /> AI Assist <ChevronDown size={11} />
+            </button>
+            {showAiDropdown && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowAiDropdown(false)} />
+                <div className="absolute right-0 top-full mt-1 bg-white border border-light-gray shadow-lg z-50 w-52">
+                  <button
+                    onClick={() => {
+                      setShowAiDropdown(false);
+                      alert("AI generation coming soon — will auto-write listing descriptions based on property details.");
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-xs text-charcoal hover:bg-cream transition flex items-center gap-2"
+                  >
+                    <Sparkles size={12} /> Generate Description
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowAiDropdown(false);
+                      alert("AI text improvement coming soon — will enhance readability and SEO of selected content.");
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-xs text-charcoal hover:bg-cream transition flex items-center gap-2"
+                  >
+                    <Type size={12} /> Improve Text
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowAiDropdown(false);
+                      alert("AI SEO optimization coming soon — will suggest keyword improvements and meta tag updates.");
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-xs text-charcoal hover:bg-cream transition flex items-center gap-2"
+                  >
+                    <Search size={12} /> SEO Optimize
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowAiDropdown(false);
+                      alert("AI translation coming soon — will translate content to multiple languages.");
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-xs text-charcoal hover:bg-cream transition flex items-center gap-2"
+                  >
+                    <Globe size={12} /> Translate
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
 
           {/* Preview Site Button */}
           <a
-            href="/"
+            href="/?preview=true"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 border border-light-gray text-charcoal px-4 py-2.5 text-[10px] tracking-[0.12em] uppercase font-medium hover:bg-cream transition"
           >
-            <ExternalLink size={13} /> Preview Site
+            <Eye size={13} /> Preview
           </a>
 
-          {/* Save Button */}
+          {/* Save as Draft */}
           <div className="relative flex items-center">
             {hasUnsavedChanges && (
               <span className="absolute -left-2 -top-1 w-2.5 h-2.5 bg-amber-400 rounded-full z-10" />
             )}
             <button
-              onClick={saveContent}
+              onClick={() => saveContent(false)}
               disabled={savingContent}
-              className="flex items-center gap-2 bg-charcoal text-white px-5 py-2.5 text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-stone transition disabled:opacity-40"
+              className="flex items-center gap-2 border border-charcoal text-charcoal px-4 py-2.5 text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-cream transition disabled:opacity-40"
             >
               <Save size={14} />
               {savingContent
@@ -801,10 +1493,19 @@ export default function AdminContentPage() {
                 : savedContent
                 ? "Saved!"
                 : hasUnsavedChanges
-                ? `Save Changes (${unsavedChanges.length})`
-                : "Save All Text"}
+                ? `Save Draft (${unsavedChanges.length})`
+                : "Save Draft"}
             </button>
           </div>
+
+          {/* Publish Button */}
+          <button
+            onClick={() => saveContent(true)}
+            disabled={savingContent}
+            className="flex items-center gap-2 bg-charcoal text-white px-5 py-2.5 text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-stone transition disabled:opacity-40"
+          >
+            <Send size={14} /> Publish
+          </button>
         </div>
       </div>
 
@@ -817,7 +1518,7 @@ export default function AdminContentPage() {
       )}
 
       {/* Stats Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5">
         <div className="bg-white border border-light-gray px-4 py-3">
           <span className={labelClass}>Total Fields</span>
           <p className="text-lg font-serif text-charcoal font-light">
@@ -833,12 +1534,28 @@ export default function AdminContentPage() {
           <p className="text-lg font-serif text-charcoal font-light">{listingGallery.length}</p>
         </div>
         <div className="bg-white border border-light-gray px-4 py-3">
-          <span className={labelClass}>Last Saved</span>
-          <p className="text-sm text-charcoal font-light mt-0.5">
-            {lastSavedAt
-              ? lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-              : "---"}
-          </p>
+          <span className={labelClass}>Publish Status</span>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                publishStatus === "published" ? "bg-green-500" : "bg-amber-400"
+              }`}
+            />
+            <p className="text-sm text-charcoal font-light capitalize">{publishStatus}</p>
+          </div>
+        </div>
+        <div className="bg-white border border-light-gray px-4 py-3">
+          <span className={labelClass}>Last Published</span>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <Clock size={12} className="text-warm-gray" />
+            <p className="text-sm text-charcoal font-light">
+              {lastPublishedAt
+                ? lastPublishedAt.toLocaleDateString([], { month: "short", day: "numeric" }) +
+                  " " +
+                  lastPublishedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                : "Never"}
+            </p>
+          </div>
         </div>
       </div>
 

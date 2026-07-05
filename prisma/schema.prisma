@@ -384,32 +384,50 @@ model UtilityReading {
 }
 
 model PropertyInventory {
-  id                String    @id @default(cuid())
-  propertyId        String
-  unitId            String?
-  itemName          String
-  category          String
-  sku               String?
-  quantityOnHand    Int       @default(0)
-  reorderThreshold  Int       @default(0)
-  unitCost          Float     @default(0)
-  avgUnitCost       Float     @default(0)
-  replacementCost   Float     @default(0)
-  remainingValue    Float     @default(0)
-  vendorId          String?
-  purchaseDate      DateTime?
-  expectedLifeMonths Int?
-  conditionStatus   String    @default("good")
-  notes             String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id                   String    @id @default(cuid())
+  propertyId           String
+  unitId               String?
+  roomId               String?
+  itemName             String
+  category             String
+  itemType             String    @default("reusable")
+  description          String?
+  sku                  String?
+  quantityExpected     Int       @default(1)
+  quantityOnHand       Int       @default(0)
+  quantityUsed         Int       @default(0)
+  quantityMissing      Int       @default(0)
+  reorderThreshold     Int       @default(0)
+  unitCost             Float     @default(0)
+  avgUnitCost          Float     @default(0)
+  replacementCost      Float     @default(0)
+  remainingValue       Float     @default(0)
+  inventoryStatus      String    @default("ok")
+  conditionStatus      String    @default("good")
+  vendorId             String?
+  purchaseDate         DateTime?
+  expectedLifeMonths   Int?
+  lastCheckedAt        DateTime?
+  lastRestockedAt      DateTime?
+  guestVisible         Boolean   @default(false)
+  cleanerCheckRequired Boolean   @default(false)
+  receiptUrl           String?
+  photoUrl             String?
+  notes                String?
+  archivedAt           DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
+  room         InventoryRoom?       @relation(fields: [roomId], references: [id], onDelete: SetNull)
   vendor       Vendor?              @relation(fields: [vendorId], references: [id])
   purchases    InventoryPurchase[]
   usages       InventoryUsage[]
   replacements InventoryReplacement[]
+  issues       InventoryIssue[]
+  cleanerChecks CleanerInventoryCheck[]
 
   @@index([propertyId])
+  @@index([roomId])
 }
 
 model InventoryPurchase {
@@ -627,6 +645,71 @@ model ListingContentLink {
 
   @@unique([listingId, contentKey])
   @@index([listingId])
+}
+
+// ─── Inventory Management System ──────────────────────────────────────
+
+model InventoryRoom {
+  id           String   @id @default(cuid())
+  propertyId   String
+  listingId    String?
+  roomName     String
+  roomType     String   @default("other")
+  displayOrder Int      @default(0)
+  notes        String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  items        PropertyInventory[]
+
+  @@index([propertyId])
+}
+
+model InventoryIssue {
+  id               String    @id @default(cuid())
+  propertyId       String
+  listingId        String?
+  roomId           String?
+  itemId           String?
+  bookingId        String?
+  issueType        String
+  issueDescription String
+  priority         String    @default("medium")
+  status           String    @default("open")
+  reportedBy       String?
+  photoUrl         String?
+  replacementCost  Float     @default(0)
+  resolvedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  item PropertyInventory? @relation(fields: [itemId], references: [id], onDelete: SetNull)
+
+  @@index([propertyId])
+  @@index([itemId])
+}
+
+model CleanerInventoryCheck {
+  id               String   @id @default(cuid())
+  propertyId       String
+  listingId        String?
+  bookingId        String?
+  roomId           String?
+  itemId           String?
+  expectedQuantity Int      @default(0)
+  actualQuantity   Int      @default(0)
+  conditionStatus  String   @default("good")
+  status           String   @default("complete")
+  cleanerNotes     String?
+  photoUrl         String?
+  checkedBy        String?
+  checkedAt        DateTime @default(now())
+
+  item PropertyInventory? @relation(fields: [itemId], references: [id], onDelete: SetNull)
+
+  @@index([propertyId])
+  @@index([itemId])
 }
 
 // ─── Guest CRM System ─────────────────────────────────────────────────

@@ -8,12 +8,23 @@ export async function GET(req: NextRequest) {
 
   try {
     const propertyId = req.nextUrl.searchParams.get("propertyId");
+    const roomId = req.nextUrl.searchParams.get("roomId");
+    const category = req.nextUrl.searchParams.get("category");
+    const inventoryStatus = req.nextUrl.searchParams.get("inventoryStatus");
+    const guestVisible = req.nextUrl.searchParams.get("guestVisible");
+    const includeArchived = req.nextUrl.searchParams.get("includeArchived");
+
     const where: Record<string, unknown> = {};
     if (propertyId) where.propertyId = propertyId;
+    if (roomId) where.roomId = roomId;
+    if (category) where.category = category;
+    if (inventoryStatus) where.inventoryStatus = inventoryStatus;
+    if (guestVisible) where.guestVisible = guestVisible === "true";
+    if (includeArchived !== "true") where.archivedAt = null;
 
     const items = await prisma.propertyInventory.findMany({
       where,
-      include: { vendor: true },
+      include: { room: true, vendor: true },
       orderBy: [{ category: "asc" }, { itemName: "asc" }],
     });
     return NextResponse.json(items);

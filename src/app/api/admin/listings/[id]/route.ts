@@ -12,7 +12,15 @@ export async function GET(
   const { id } = await params;
   const listing = await prisma.listing.findUnique({
     where: { id },
-    include: { closedDates: true },
+    include: {
+      closedDates: true,
+      pricingConfig: true,
+      galleryItems: {
+        include: { media: true },
+        orderBy: { sortOrder: "asc" },
+      },
+      _count: { select: { reservations: true, galleryItems: true } },
+    },
   });
   if (!listing) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json(listing);

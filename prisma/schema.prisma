@@ -33,9 +33,14 @@ model Listing {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  closedDates  ClosedDate[]
-  reservations Reservation[]
-  galleryItems ListingMedia[]
+  closedDates   ClosedDate[]
+  reservations  Reservation[]
+  galleryItems  ListingMedia[]
+  pricingConfig PricingConfig?
+  dailyRates    FinalDailyRate[]
+  pricingRules  PricingRule[]
+  pricingLogs   PricingChangeLog[]
+  contentLinks  ListingContentLink[]
 }
 
 model Media {
@@ -72,12 +77,13 @@ model PageMedia {
 }
 
 model SiteContent {
-  id        String   @id @default(cuid())
-  key       String   @unique
-  value     String
-  section   String
-  label     String
-  updatedAt DateTime @updatedAt
+  id           String               @id @default(cuid())
+  key          String               @unique
+  value        String
+  section      String
+  label        String
+  updatedAt    DateTime             @updatedAt
+  contentLinks ListingContentLink[]
 }
 
 model ClosedDate {
@@ -530,4 +536,95 @@ model WeeklyExpenseSummary {
   createdAt          DateTime @default(now())
 
   @@index([propertyId])
+}
+
+// ─── Pricing System (Source of Truth) ────────────────────────────────
+
+model PricingConfig {
+  id                    String   @id @default(cuid())
+  listingId             String   @unique
+  listing               Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  baseNightlyRate       Float    @default(0)
+  cleaningFee           Float    @default(0)
+  weekendRate           Float?
+  minRate               Float?
+  maxRate               Float?
+  petFee                Float    @default(0)
+  extraGuestFee         Float    @default(0)
+  securityDeposit       Float    @default(0)
+  minimumStay           Int      @default(1)
+  dynamicPricingEnabled Boolean  @default(false)
+  pricingProvider       String?
+  updatedAt             DateTime @updatedAt
+}
+
+model FinalDailyRate {
+  id                 String   @id @default(cuid())
+  listingId          String
+  listing            Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  date               DateTime
+  finalRate          Float
+  rateSource         String   @default("base")
+  baseRate           Float?
+  ruleAdjustedRate   Float?
+  aiSuggestedRate    Float?
+  approvedAiRate     Float?
+  manualOverrideRate Float?
+  isLocked           Boolean  @default(false)
+  syncStatus         String   @default("synced")
+  updatedAt          DateTime @updatedAt
+
+  @@unique([listingId, date])
+  @@index([listingId])
+}
+
+model PricingRule {
+  id              String   @id @default(cuid())
+  listingId       String
+  listing         Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  ruleType        String
+  ruleName        String
+  adjustmentType  String   @default("percentage")
+  adjustmentValue Float    @default(0)
+  appliesTo       String   @default("all")
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([listingId])
+}
+
+model PricingChangeLog {
+  id                  String   @id @default(cuid())
+  listingId           String
+  listing             Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  changedField        String
+  oldValue            String?
+  newValue            String?
+  changedFromPage     String   @default("listings")
+  changedBy           String?
+  affectsFinalPricing Boolean  @default(true)
+  createdAt           DateTime @default(now())
+
+  @@index([listingId])
+}
+
+// ─── Content Linking System ──────────────────────────────────────────
+
+model ListingContentLink {
+  id             String       @id @default(cuid())
+  listingId      String
+  listing        Listing      @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  contentKey     String
+  siteContentId  String?
+  siteContent    SiteContent? @relation(fields: [siteContentId], references: [id])
+  usageLocation  String       @default("listing")
+  isSynced       Boolean      @default(true)
+  overrideValue  String?
+  allowsOverride Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([listingId, contentKey])
+  @@index([listingId])
 }

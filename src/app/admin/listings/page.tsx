@@ -1,12 +1,15 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useEffect, useState, useRef, useCallback } from "react";
 import {
   Plus, Pencil, X, Search, Filter, ChevronDown, ChevronRight, Camera,
   Calendar, DollarSign, Eye, MoreHorizontal, Check, AlertTriangle,
   ExternalLink, Copy, Archive, Trash2, Image, Wifi, Car, Home, Tv,
   Waves, Shield, Star, TrendingUp, BarChart3, Users, BedDouble, Bath,
-  Clock, Settings, Link as LinkIcon, RefreshCw, Zap
+  Clock, Settings, Link as LinkIcon, RefreshCw, Zap, Upload, ChevronUp,
+  ArrowUp, ArrowDown, ImagePlus, History
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -32,9 +35,66 @@ interface Listing {
   _count?: { reservations: number };
 }
 
+interface Media {
+  id: string;
+  filename: string;
+  originalName: string;
+  url: string;
+  mimeType: string;
+  size: number;
+  createdAt: string;
+  listingMedia: ListingMedia[];
+  pageMedia: unknown[];
+}
+
+interface ListingMedia {
+  id: string;
+  listingId: string;
+  mediaId: string;
+  room: string | null;
+  label: string | null;
+  sortOrder: number;
+  media: Media;
+}
+
+interface PricingConfig {
+  id: string;
+  listingId: string;
+  baseNightlyRate: number | null;
+  cleaningFee: number | null;
+  weekendRate: number | null;
+  minRate: number | null;
+  maxRate: number | null;
+  petFee: number | null;
+  extraGuestFee: number | null;
+  securityDeposit: number | null;
+  minimumStay: number | null;
+  dynamicPricingEnabled: boolean;
+  pricingProvider: string | null;
+  updatedAt: string;
+}
+
+interface PricingChangeLog {
+  id: string;
+  listingId: string;
+  changedField: string;
+  oldValue: string | null;
+  newValue: string | null;
+  changedFromPage: string | null;
+  changedBy: string | null;
+  affectsFinalPricing: boolean;
+  createdAt: string;
+}
+
 type DrawerTab = "basic" | "photos" | "amenities" | "pricing" | "availability" | "channels" | "performance" | "advanced";
 
 const LISTING_TYPES = ["Entire Home", "Private Room", "Shared Room", "Guest Suite", "Studio", "Loft"];
+
+const ROOM_TYPES = [
+  "Living Room", "Kitchen", "Master Bedroom", "Bedroom 2", "Bedroom 3",
+  "Bathroom", "Master Bathroom", "Exterior", "Pool", "Patio",
+  "Dining Room", "Backyard", "Front", "Other"
+];
 
 const AMENITY_CATEGORIES: Record<string, string[]> = {
   Essentials: ["WiFi", "Air Conditioning", "Heating", "Towels", "Linens", "Hot Water"],
@@ -133,9 +193,6 @@ export default function AdminListingsPage() {
   /* --- create wizard step ----------------------------------------- */
   const [createStep, setCreateStep] = useState(0);
 
-  /* --- photo add input -------------------------------------------- */
-  const [photoInput, setPhotoInput] = useState("");
-
   /* --- inline edit state ------------------------------------------ */
   const [inlineEdit, setInlineEdit] = useState<{ id: string; field: "pricePerNight" | "cleaningFee" } | null>(null);
   const [inlineValue, setInlineValue] = useState("");
@@ -147,6 +204,42 @@ export default function AdminListingsPage() {
 
   /* --- delete confirmation ---------------------------------------- */
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
+
+  /* --- photos tab state ------------------------------------------- */
+  const [galleryItems, setGalleryItems] = useState<ListingMedia[]>([]);
+  const [galleryLoading, setGalleryLoading] = useState(false);
+  const [allMedia, setAllMedia] = useState<Media[]>([]);
+  const [mediaLibraryOpen, setMediaLibraryOpen] = useState(false);
+  const [mediaSearch, setMediaSearch] = useState("");
+  const [mediaRoomFilter, setMediaRoomFilter] = useState("");
+  const [mediaSelected, setMediaSelected] = useState<Set<string>>(new Set());
+  const [assignRoom, setAssignRoom] = useState("");
+  const [assignLabel, setAssignLabel] = useState("");
+  const [editingGalleryItem, setEditingGalleryItem] = useState<string | null>(null);
+  const [editRoom, setEditRoom] = useState("");
+  const [editLabel, setEditLabel] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  /* --- pricing tab state ------------------------------------------ */
+  const [pricingConfig, setPricingConfig] = useState<PricingConfig | null>(null);
+  const [pricingLoading, setPricingLoading] = useState(false);
+  const [pricingForm, setPricingForm] = useState({
+    baseNightlyRate: 0,
+    cleaningFee: 0,
+    weekendRate: null as number | null,
+    minRate: null as number | null,
+    maxRate: null as number | null,
+    petFee: null as number | null,
+    extraGuestFee: null as number | null,
+    securityDeposit: null as number | null,
+    minimumStay: null as number | null,
+    dynamicPricingEnabled: false,
+    pricingProvider: "",
+  });
+  const [pricingLogs, setPricingLogs] = useState<PricingChangeLog[]>([]);
+  const [showPricingHistory, setShowPricingHistory] = useState(false);
+  const [pricingHistoryLoading, setPricingHistoryLoading] = useState(false);
 
   /* --- load listings ---------------------------------------------- */
   const loadListings = useCallback(async () => {
@@ -173,6 +266,67 @@ export default function AdminListingsPage() {
   useEffect(() => {
     if (inlineEdit && inlineRef.current) inlineRef.current.focus();
   }, [inlineEdit]);
+
+  /* --- load gallery items when photos tab opens ------------------- */
+  const loadGalleryItems = useCallback(async (listingId: string) => {
+    setGalleryLoading(true);
+    try {
+      const res = await fetch(`/api/admin/listing-media?listingId=${listingId}`);
+      const data = await res.json();
+      setGalleryItems(Array.isArray(data) ? data.sort((a: ListingMedia, b: ListingMedia) => a.sortOrder - b.sortOrder) : []);
+    } catch { setGalleryItems([]); }
+    setGalleryLoading(false);
+  }, []);
+
+  const loadAllMedia = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/media");
+      const data = await res.json();
+      setAllMedia(Array.isArray(data) ? data : []);
+    } catch { setAllMedia([]); }
+  }, []);
+
+  /* --- load pricing config ---------------------------------------- */
+  const loadPricingConfig = useCallback(async (listingId: string) => {
+    setPricingLoading(true);
+    try {
+      const res = await fetch(`/api/admin/pricing-config?listingId=${listingId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setPricingConfig(data);
+        setPricingForm({
+          baseNightlyRate: data.baseNightlyRate ?? 0,
+          cleaningFee: data.cleaningFee ?? 0,
+          weekendRate: data.weekendRate,
+          minRate: data.minRate,
+          maxRate: data.maxRate,
+          petFee: data.petFee,
+          extraGuestFee: data.extraGuestFee,
+          securityDeposit: data.securityDeposit,
+          minimumStay: data.minimumStay,
+          dynamicPricingEnabled: data.dynamicPricingEnabled ?? false,
+          pricingProvider: data.pricingProvider ?? "",
+        });
+      } else {
+        setPricingConfig(null);
+      }
+    } catch { setPricingConfig(null); }
+    setPricingLoading(false);
+  }, []);
+
+  const loadPricingLogs = useCallback(async (listingId: string) => {
+    setPricingHistoryLoading(true);
+    try {
+      const res = await fetch(`/api/admin/pricing-logs?listingId=${listingId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setPricingLogs(Array.isArray(data) ? data : []);
+      } else {
+        setPricingLogs([]);
+      }
+    } catch { setPricingLogs([]); }
+    setPricingHistoryLoading(false);
+  }, []);
 
   /* ---------------------------------------------------------------- */
   /*  Derived data                                                     */
@@ -230,6 +384,12 @@ export default function AdminListingsPage() {
     setDrawerMode("edit");
     setDrawerTab("basic");
     setDeleteConfirmText("");
+    setGalleryItems([]);
+    setPricingConfig(null);
+    setShowPricingHistory(false);
+    setPricingLogs([]);
+    setMediaLibraryOpen(false);
+    setMediaSelected(new Set());
     setDrawerOpen(true);
   }
 
@@ -256,7 +416,6 @@ export default function AdminListingsPage() {
         body: JSON.stringify(form),
       });
       await loadListings();
-      // Update editingListing reference
       const updated = listings.find(l => l.id === editingListing.id);
       if (updated) setEditingListing({ ...updated, ...form } as Listing);
     } catch { /* ignore */ }
@@ -335,6 +494,144 @@ export default function AdminListingsPage() {
     await loadListings();
   }
 
+  /* --- Photo actions ---------------------------------------------- */
+
+  async function removeGalleryItem(itemId: string) {
+    if (!editingListing) return;
+    try {
+      await fetch("/api/admin/listing-media", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: itemId }),
+      });
+      await loadGalleryItems(editingListing.id);
+    } catch { /* ignore */ }
+  }
+
+  async function updateGalleryItem(itemId: string, data: { room?: string; label?: string; sortOrder?: number }) {
+    if (!editingListing) return;
+    try {
+      await fetch("/api/admin/listing-media", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: itemId, ...data }),
+      });
+      await loadGalleryItems(editingListing.id);
+    } catch { /* ignore */ }
+  }
+
+  async function moveGalleryItem(itemId: string, direction: "up" | "down") {
+    const idx = galleryItems.findIndex(g => g.id === itemId);
+    if (idx < 0) return;
+    const targetIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= galleryItems.length) return;
+
+    const current = galleryItems[idx];
+    const target = galleryItems[targetIdx];
+
+    await Promise.all([
+      updateGalleryItem(current.id, { sortOrder: target.sortOrder }),
+      updateGalleryItem(target.id, { sortOrder: current.sortOrder }),
+    ]);
+  }
+
+  async function setAsCover(itemId: string) {
+    if (!editingListing) return;
+    // Set this item to sortOrder 0, shift others
+    const sorted = [...galleryItems].sort((a, b) => a.sortOrder - b.sortOrder);
+    const updates: Promise<void>[] = [];
+    let order = 1;
+    for (const item of sorted) {
+      if (item.id === itemId) {
+        updates.push(updateGalleryItem(item.id, { sortOrder: 0 }));
+      } else {
+        updates.push(updateGalleryItem(item.id, { sortOrder: order }));
+        order++;
+      }
+    }
+    await Promise.all(updates);
+  }
+
+  async function addMediaToListing(mediaIds: string[]) {
+    if (!editingListing) return;
+    const currentMax = galleryItems.length > 0 ? Math.max(...galleryItems.map(g => g.sortOrder)) : -1;
+    let nextOrder = currentMax + 1;
+
+    for (const mediaId of mediaIds) {
+      try {
+        await fetch("/api/admin/listing-media", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            listingId: editingListing.id,
+            mediaId,
+            room: assignRoom || null,
+            label: assignLabel || null,
+          }),
+        });
+        nextOrder++;
+      } catch { /* ignore */ }
+    }
+    setMediaSelected(new Set());
+    setAssignRoom("");
+    setAssignLabel("");
+    await loadGalleryItems(editingListing.id);
+  }
+
+  async function uploadAndAssignPhoto(files: FileList) {
+    if (!editingListing || files.length === 0) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      for (let i = 0; i < files.length; i++) {
+        formData.append("files", files[i]);
+      }
+      const res = await fetch("/api/admin/media", {
+        method: "POST",
+        body: formData,
+      });
+      if (res.ok) {
+        const uploaded = await res.json();
+        const mediaIds = Array.isArray(uploaded)
+          ? uploaded.map((m: Media) => m.id)
+          : [uploaded.id];
+        await addMediaToListing(mediaIds);
+        await loadAllMedia();
+      }
+    } catch { /* ignore */ }
+    setUploading(false);
+  }
+
+  /* --- Pricing actions -------------------------------------------- */
+
+  async function savePricing() {
+    if (!editingListing) return;
+    setSaving(true);
+    try {
+      await fetch("/api/admin/pricing-config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          listingId: editingListing.id,
+          baseNightlyRate: pricingForm.baseNightlyRate,
+          cleaningFee: pricingForm.cleaningFee,
+          weekendRate: pricingForm.weekendRate,
+          minRate: pricingForm.minRate,
+          maxRate: pricingForm.maxRate,
+          petFee: pricingForm.petFee,
+          extraGuestFee: pricingForm.extraGuestFee,
+          securityDeposit: pricingForm.securityDeposit,
+          minimumStay: pricingForm.minimumStay,
+          dynamicPricingEnabled: pricingForm.dynamicPricingEnabled,
+          pricingProvider: pricingForm.pricingProvider || null,
+          changedFromPage: "listings",
+        }),
+      });
+      await loadPricingConfig(editingListing.id);
+    } catch { /* ignore */ }
+    setSaving(false);
+  }
+
   /* ---------------------------------------------------------------- */
   /*  Amenity helpers                                                  */
   /* ---------------------------------------------------------------- */
@@ -346,6 +643,24 @@ export default function AdminListingsPage() {
         ? f.amenities.filter(a => a !== name)
         : [...f.amenities, name],
     }));
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  Tab change handler                                               */
+  /* ---------------------------------------------------------------- */
+
+  function handleTabChange(tab: DrawerTab) {
+    setDrawerTab(tab);
+    if (!editingListing) return;
+
+    if (tab === "photos") {
+      loadGalleryItems(editingListing.id);
+      loadAllMedia();
+    }
+    if (tab === "pricing") {
+      loadPricingConfig(editingListing.id);
+      setShowPricingHistory(false);
+    }
   }
 
   /* ---------------------------------------------------------------- */
@@ -477,6 +792,512 @@ export default function AdminListingsPage() {
     );
   }
 
+  /* --- Photos tab ------------------------------------------------- */
+
+  function renderPhotosTab() {
+    if (!editingListing) return null;
+
+    const filteredMedia = allMedia.filter(m => {
+      if (mediaSearch && !m.filename.toLowerCase().includes(mediaSearch.toLowerCase()) && !m.originalName.toLowerCase().includes(mediaSearch.toLowerCase())) return false;
+      if (mediaRoomFilter) {
+        const assignedRooms = m.listingMedia?.map(lm => lm.room).filter(Boolean) ?? [];
+        if (!assignedRooms.includes(mediaRoomFilter)) return false;
+      }
+      return true;
+    });
+
+    return (
+      <div className="space-y-5">
+        {/* Current Listing Photos */}
+        <div>
+          <p className={labelClass}>Listing Gallery ({galleryItems.length} photos)</p>
+          {galleryLoading ? (
+            <div className="text-xs text-warm-gray py-4 text-center">Loading photos...</div>
+          ) : galleryItems.length === 0 ? (
+            <div className="border border-dashed border-light-gray p-6 text-center">
+              <Camera size={24} className="text-warm-gray mx-auto mb-2" />
+              <p className="text-xs text-warm-gray">No photos assigned to this listing yet.</p>
+              <p className="text-[9px] text-warm-gray mt-1">Add photos from the Media Library below.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {galleryItems.map((item, idx) => (
+                <div key={item.id} className="border border-light-gray bg-white p-2 flex items-start gap-3">
+                  {/* Thumbnail */}
+                  <div className="w-16 h-16 bg-cream border border-light-gray overflow-hidden shrink-0">
+                    <img src={item.media.url} alt={item.label || ""} className="w-full h-full object-cover" />
+                  </div>
+
+                  {/* Details */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {item.sortOrder === 0 && (
+                        <span className="text-[8px] tracking-[0.12em] uppercase bg-emerald-50 text-accent border border-emerald-200 px-1.5 py-0.5 font-medium">
+                          Cover
+                        </span>
+                      )}
+                      {item.room && (
+                        <span className="text-[8px] tracking-[0.12em] uppercase bg-blue-50 text-blue-600 border border-blue-200 px-1.5 py-0.5 font-medium">
+                          {item.room}
+                        </span>
+                      )}
+                      <span className="text-[9px] text-warm-gray">#{item.sortOrder}</span>
+                    </div>
+                    {editingGalleryItem === item.id ? (
+                      <div className="mt-1.5 space-y-1.5">
+                        <select
+                          value={editRoom}
+                          onChange={e => setEditRoom(e.target.value)}
+                          className={`${inputClass} py-1.5 text-[10px]`}
+                        >
+                          <option value="">No Room</option>
+                          {ROOM_TYPES.map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                        <input
+                          value={editLabel}
+                          onChange={e => setEditLabel(e.target.value)}
+                          placeholder="Caption / label"
+                          className={`${inputClass} py-1.5 text-[10px]`}
+                        />
+                        <div className="flex gap-1.5">
+                          <button
+                            onClick={async () => {
+                              await updateGalleryItem(item.id, { room: editRoom || undefined, label: editLabel || undefined });
+                              setEditingGalleryItem(null);
+                            }}
+                            className={`${btnPrimary} py-1 px-2 text-[8px]`}
+                          >
+                            Save
+                          </button>
+                          <button onClick={() => setEditingGalleryItem(null)} className={`${btnOutline} py-1 px-2 text-[9px]`}>
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-warm-gray mt-0.5 truncate">{item.label || item.media.originalName || item.media.filename}</p>
+                    )}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex flex-col gap-1 shrink-0">
+                    <button
+                      onClick={() => moveGalleryItem(item.id, "up")}
+                      disabled={idx === 0}
+                      className={`${btnOutline} p-1 disabled:opacity-20`}
+                      title="Move up"
+                    >
+                      <ArrowUp size={12} />
+                    </button>
+                    <button
+                      onClick={() => moveGalleryItem(item.id, "down")}
+                      disabled={idx === galleryItems.length - 1}
+                      className={`${btnOutline} p-1 disabled:opacity-20`}
+                      title="Move down"
+                    >
+                      <ArrowDown size={12} />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingGalleryItem(item.id);
+                        setEditRoom(item.room || "");
+                        setEditLabel(item.label || "");
+                      }}
+                      className={`${btnOutline} p-1`}
+                      title="Edit room/label"
+                    >
+                      <Pencil size={12} />
+                    </button>
+                    {item.sortOrder !== 0 && (
+                      <button
+                        onClick={() => setAsCover(item.id)}
+                        className={`${btnOutline} p-1`}
+                        title="Set as cover"
+                      >
+                        <Star size={12} />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => removeGalleryItem(item.id)}
+                      className="border border-red-200 text-red-500 hover:bg-red-50 transition p-1"
+                      title="Remove from listing"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Open Full Media Library link */}
+        <a href="/admin/media" className={`flex items-center gap-2 ${btnOutline} w-full justify-center text-[10px]`}>
+          <ExternalLink size={12} /> Open Full Media Library
+        </a>
+
+        {/* Mini Media Library Panel */}
+        <div className="border border-light-gray">
+          <button
+            onClick={() => {
+              setMediaLibraryOpen(!mediaLibraryOpen);
+              if (!mediaLibraryOpen) loadAllMedia();
+            }}
+            className="w-full flex items-center justify-between px-4 py-3 hover:bg-cream/50 transition"
+          >
+            <span className={labelClass + " mb-0"}>Add From Media Library</span>
+            {mediaLibraryOpen ? <ChevronUp size={14} className="text-warm-gray" /> : <ChevronDown size={14} className="text-warm-gray" />}
+          </button>
+
+          {mediaLibraryOpen && (
+            <div className="px-4 pb-4 space-y-3 border-t border-light-gray pt-3">
+              {/* Search & filter */}
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-warm-gray" />
+                  <input
+                    value={mediaSearch}
+                    onChange={e => setMediaSearch(e.target.value)}
+                    placeholder="Search by filename..."
+                    className={`${inputClass} pl-7 py-1.5 text-[10px]`}
+                  />
+                </div>
+                <select
+                  value={mediaRoomFilter}
+                  onChange={e => setMediaRoomFilter(e.target.value)}
+                  className={`${inputClass} w-auto py-1.5 text-[10px]`}
+                >
+                  <option value="">All Rooms</option>
+                  {ROOM_TYPES.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+
+              {/* Media grid */}
+              <div className="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto">
+                {filteredMedia.map(m => {
+                  const isSelected = mediaSelected.has(m.id);
+                  const alreadyAssigned = galleryItems.some(g => g.mediaId === m.id);
+                  return (
+                    <button
+                      key={m.id}
+                      disabled={alreadyAssigned}
+                      onClick={() => {
+                        if (alreadyAssigned) return;
+                        setMediaSelected(prev => {
+                          const next = new Set(prev);
+                          if (next.has(m.id)) next.delete(m.id); else next.add(m.id);
+                          return next;
+                        });
+                      }}
+                      className={`relative aspect-square bg-cream border overflow-hidden transition ${
+                        alreadyAssigned
+                          ? "border-light-gray opacity-40 cursor-not-allowed"
+                          : isSelected
+                            ? "border-charcoal ring-2 ring-charcoal/30"
+                            : "border-light-gray hover:border-charcoal/40"
+                      }`}
+                    >
+                      <img src={m.url} alt={m.originalName} className="w-full h-full object-cover" />
+                      {isSelected && (
+                        <div className="absolute top-1 right-1 bg-charcoal text-white w-5 h-5 flex items-center justify-center">
+                          <Check size={12} />
+                        </div>
+                      )}
+                      {alreadyAssigned && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-white/60">
+                          <span className="text-[8px] tracking-[0.1em] uppercase font-medium text-warm-gray">Added</span>
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+                {filteredMedia.length === 0 && (
+                  <div className="col-span-3 text-center py-4 text-xs text-warm-gray">No media found.</div>
+                )}
+              </div>
+
+              {/* Assignment fields */}
+              {mediaSelected.size > 0 && (
+                <div className="border border-light-gray p-3 space-y-2 bg-cream/30">
+                  <p className="text-[9px] tracking-[0.1em] uppercase text-charcoal font-medium">{mediaSelected.size} photo{mediaSelected.size !== 1 ? "s" : ""} selected</p>
+                  <div className="flex gap-2">
+                    <select
+                      value={assignRoom}
+                      onChange={e => setAssignRoom(e.target.value)}
+                      className={`${inputClass} flex-1 py-1.5 text-[10px]`}
+                    >
+                      <option value="">Room (optional)</option>
+                      {ROOM_TYPES.map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                    <input
+                      value={assignLabel}
+                      onChange={e => setAssignLabel(e.target.value)}
+                      placeholder="Label (optional)"
+                      className={`${inputClass} flex-1 py-1.5 text-[10px]`}
+                    />
+                  </div>
+                  <button
+                    onClick={() => addMediaToListing(Array.from(mediaSelected))}
+                    className={`w-full ${btnPrimary} py-2`}
+                  >
+                    Add Selected to Listing
+                  </button>
+                </div>
+              )}
+
+              {/* Upload new */}
+              <div className="border-t border-light-gray pt-3">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={e => { if (e.target.files) uploadAndAssignPhoto(e.target.files); }}
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className={`w-full ${btnOutline} flex items-center justify-center gap-2 text-[10px]`}
+                >
+                  <Upload size={12} />
+                  {uploading ? "Uploading..." : "Upload New Photo"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  /* --- Pricing tab ------------------------------------------------ */
+
+  function renderPricingTab() {
+    if (!editingListing) return null;
+
+    if (pricingLoading) {
+      return <div className="text-xs text-warm-gray py-4 text-center">Loading pricing config...</div>;
+    }
+
+    return (
+      <div className="space-y-5">
+        {/* Pricing Source Display */}
+        <div className="border border-light-gray p-4 bg-cream/30 space-y-2">
+          <p className={labelClass}>Pricing Overview</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <span className="text-[9px] text-warm-gray uppercase tracking-wide">Current Rate</span>
+              <p className="text-lg font-serif text-charcoal">${pricingForm.baseNightlyRate || editingListing.pricePerNight}</p>
+            </div>
+            <div>
+              <span className="text-[9px] text-warm-gray uppercase tracking-wide">Source</span>
+              <p className="text-xs text-charcoal mt-0.5">
+                {pricingConfig ? (pricingForm.dynamicPricingEnabled ? "Dynamic pricing" : "Base listing rate") : "Base listing rate"}
+              </p>
+            </div>
+            <div>
+              <span className="text-[9px] text-warm-gray uppercase tracking-wide">Dynamic Pricing</span>
+              <p className="text-xs text-charcoal mt-0.5">
+                {pricingForm.dynamicPricingEnabled ? (
+                  <span className="text-accent">On</span>
+                ) : (
+                  <span className="text-warm-gray">Off</span>
+                )}
+              </p>
+            </div>
+            <div>
+              <span className="text-[9px] text-warm-gray uppercase tracking-wide">Final Pricing Status</span>
+              <p className="text-xs text-accent mt-0.5">Synced</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Warning banner */}
+        <div className="flex items-start gap-2 border border-amber-200 bg-amber-50 px-3 py-2.5">
+          <AlertTriangle size={14} className="text-amber-500 shrink-0 mt-0.5" />
+          <p className="text-[10px] text-amber-700 leading-relaxed">
+            This listing uses shared pricing from Revenue &amp; Analytics. Changes here update the shared pricing system used by Calendar, Direct Booking, and Revenue reports.
+          </p>
+        </div>
+
+        {/* Pricing fields */}
+        <div className="space-y-4">
+          <div>
+            <label className={labelClass}>Base Nightly Rate ($)</label>
+            <input
+              type="number" min={0} step={0.01}
+              value={pricingForm.baseNightlyRate}
+              onChange={e => setPricingForm({ ...pricingForm, baseNightlyRate: Number(e.target.value) })}
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Cleaning Fee ($)</label>
+            <input
+              type="number" min={0} step={0.01}
+              value={pricingForm.cleaningFee}
+              onChange={e => setPricingForm({ ...pricingForm, cleaningFee: Number(e.target.value) })}
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Weekend Rate ($) {pricingForm.weekendRate === null && <span className="text-warm-gray normal-case">- Not Set</span>}</label>
+            <input
+              type="number" min={0} step={0.01}
+              value={pricingForm.weekendRate ?? ""}
+              onChange={e => setPricingForm({ ...pricingForm, weekendRate: e.target.value ? Number(e.target.value) : null })}
+              placeholder="Not Set"
+              className={inputClass}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelClass}>Minimum Rate ($)</label>
+              <input
+                type="number" min={0} step={0.01}
+                value={pricingForm.minRate ?? ""}
+                onChange={e => setPricingForm({ ...pricingForm, minRate: e.target.value ? Number(e.target.value) : null })}
+                placeholder="Not Set"
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Maximum Rate ($)</label>
+              <input
+                type="number" min={0} step={0.01}
+                value={pricingForm.maxRate ?? ""}
+                onChange={e => setPricingForm({ ...pricingForm, maxRate: e.target.value ? Number(e.target.value) : null })}
+                placeholder="Not Set"
+                className={inputClass}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelClass}>Pet Fee ($)</label>
+              <input
+                type="number" min={0} step={0.01}
+                value={pricingForm.petFee ?? ""}
+                onChange={e => setPricingForm({ ...pricingForm, petFee: e.target.value ? Number(e.target.value) : null })}
+                placeholder="Not Set"
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Extra Guest Fee ($)</label>
+              <input
+                type="number" min={0} step={0.01}
+                value={pricingForm.extraGuestFee ?? ""}
+                onChange={e => setPricingForm({ ...pricingForm, extraGuestFee: e.target.value ? Number(e.target.value) : null })}
+                placeholder="Not Set"
+                className={inputClass}
+              />
+            </div>
+          </div>
+          <div>
+            <label className={labelClass}>Security Deposit ($)</label>
+            <input
+              type="number" min={0} step={0.01}
+              value={pricingForm.securityDeposit ?? ""}
+              onChange={e => setPricingForm({ ...pricingForm, securityDeposit: e.target.value ? Number(e.target.value) : null })}
+              placeholder="Not Set"
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Minimum Stay (nights)</label>
+            <input
+              type="number" min={1} step={1}
+              value={pricingForm.minimumStay ?? ""}
+              onChange={e => setPricingForm({ ...pricingForm, minimumStay: e.target.value ? Number(e.target.value) : null })}
+              placeholder="No minimum"
+              className={inputClass}
+            />
+          </div>
+
+          {/* Dynamic Pricing Toggle */}
+          <label className="flex items-center gap-3 cursor-pointer py-2">
+            <input
+              type="checkbox"
+              checked={pricingForm.dynamicPricingEnabled}
+              onChange={e => setPricingForm({ ...pricingForm, dynamicPricingEnabled: e.target.checked })}
+              className="accent-charcoal"
+            />
+            <span className="text-xs text-charcoal">Enable Dynamic Pricing</span>
+          </label>
+
+          <div>
+            <label className={labelClass}>AI Pricing Provider</label>
+            <input
+              value={pricingForm.pricingProvider}
+              onChange={e => setPricingForm({ ...pricingForm, pricingProvider: e.target.value })}
+              placeholder="e.g. PriceLabs"
+              className={inputClass}
+            />
+          </div>
+        </div>
+
+        {/* Save */}
+        <button onClick={savePricing} disabled={saving} className={`w-full ${btnPrimary}`}>
+          {saving ? "Saving..." : "Save Pricing"}
+        </button>
+
+        {/* Action buttons */}
+        <div className="flex flex-wrap gap-2">
+          <a href="/admin/revenue?tab=pricing" className={`${btnOutline} flex items-center gap-1.5 text-[10px]`}>
+            <DollarSign size={12} /> Open Dynamic Pricing
+          </a>
+          <a href="/admin/availability" className={`${btnOutline} flex items-center gap-1.5 text-[10px]`}>
+            <Calendar size={12} /> View Final Rate Calendar
+          </a>
+          <button
+            onClick={() => {
+              if (!showPricingHistory) {
+                loadPricingLogs(editingListing.id);
+              }
+              setShowPricingHistory(!showPricingHistory);
+            }}
+            className={`${btnOutline} flex items-center gap-1.5 text-[10px]`}
+          >
+            <History size={12} /> {showPricingHistory ? "Hide" : "View"} Pricing History
+          </button>
+        </div>
+
+        {/* Pricing History */}
+        {showPricingHistory && (
+          <div className="border border-light-gray">
+            <div className="px-3 py-2 bg-cream/50 border-b border-light-gray">
+              <p className={labelClass + " mb-0"}>Recent Pricing Changes</p>
+            </div>
+            {pricingHistoryLoading ? (
+              <div className="text-xs text-warm-gray py-4 text-center">Loading history...</div>
+            ) : pricingLogs.length === 0 ? (
+              <div className="text-xs text-warm-gray py-4 text-center">No pricing changes recorded.</div>
+            ) : (
+              <div className="divide-y divide-light-gray max-h-48 overflow-y-auto">
+                {pricingLogs.map(log => (
+                  <div key={log.id} className="px-3 py-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-charcoal font-medium">{log.changedField}</span>
+                      <span className="text-[9px] text-warm-gray">{relativeTime(log.createdAt)}</span>
+                    </div>
+                    <p className="text-[10px] text-warm-gray mt-0.5">
+                      {log.oldValue ?? "null"} &rarr; {log.newValue ?? "null"}
+                      {log.changedFromPage && <span className="ml-2 text-[8px] uppercase tracking-wider">via {log.changedFromPage}</span>}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  /* --- Drawer content --------------------------------------------- */
+
   function renderDrawerContent() {
     if (drawerMode === "create") return renderCreateWizard();
 
@@ -498,7 +1319,7 @@ export default function AdminListingsPage() {
           {tabs.map(t => (
             <button
               key={t.key}
-              onClick={() => setDrawerTab(t.key)}
+              onClick={() => handleTabChange(t.key)}
               className={`text-[9px] tracking-[0.12em] uppercase font-medium px-3 py-1.5 whitespace-nowrap transition ${
                 drawerTab === t.key ? "bg-charcoal text-white" : "text-warm-gray hover:text-charcoal hover:bg-cream"
               }`}
@@ -533,42 +1354,7 @@ export default function AdminListingsPage() {
           </div>
         )}
 
-        {drawerTab === "photos" && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-3 gap-2">
-              {form.photos.map((url, idx) => (
-                <div key={idx} className="relative group aspect-square bg-cream border border-light-gray overflow-hidden">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={url} alt="" className="w-full h-full object-cover" />
-                  <button
-                    onClick={() => setForm({ ...form, photos: form.photos.filter((_, i) => i !== idx) })}
-                    className="absolute top-1 right-1 bg-white/90 p-0.5 opacity-0 group-hover:opacity-100 transition"
-                  >
-                    <X size={12} className="text-red-500" />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <input
-                value={photoInput}
-                onChange={e => setPhotoInput(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); if (photoInput.trim()) { setForm({ ...form, photos: [...form.photos, photoInput.trim()] }); setPhotoInput(""); } } }}
-                placeholder="Paste image URL..."
-                className={`flex-1 ${inputClass}`}
-              />
-              <button
-                type="button"
-                onClick={() => { if (photoInput.trim()) { setForm({ ...form, photos: [...form.photos, photoInput.trim()] }); setPhotoInput(""); } }}
-                className={btnPrimary}
-              >
-                Add
-              </button>
-            </div>
-            <p className="text-[9px] tracking-[0.1em] uppercase text-warm-gray">Upload photos through Media Library for best results</p>
-            <button onClick={saveTab} disabled={saving} className={`w-full ${btnPrimary}`}>{saving ? "Saving..." : "Save Photos"}</button>
-          </div>
-        )}
+        {drawerTab === "photos" && renderPhotosTab()}
 
         {drawerTab === "amenities" && (
           <div className="space-y-4">
@@ -577,40 +1363,35 @@ export default function AdminListingsPage() {
           </div>
         )}
 
-        {drawerTab === "pricing" && (
-          <div className="space-y-4">
-            <div>
-              <label className={labelClass}>Base Nightly Rate ($)</label>
-              <input type="number" min={0} step={0.01} value={form.pricePerNight} onChange={e => setForm({ ...form, pricePerNight: Number(e.target.value) })} className={inputClass} />
-            </div>
-            <div>
-              <label className={labelClass}>Cleaning Fee ($)</label>
-              <input type="number" min={0} step={0.01} value={form.cleaningFee} onChange={e => setForm({ ...form, cleaningFee: Number(e.target.value) })} className={inputClass} />
-            </div>
-            <button onClick={saveTab} disabled={saving} className={`w-full ${btnPrimary}`}>{saving ? "Saving..." : "Save Pricing"}</button>
-
-            <div className="border-t border-light-gray pt-4 mt-4 space-y-3">
-              {["Weekend Rate", "Min Rate", "Max Rate", "Pet Fee", "Extra Guest Fee", "Security Deposit"].map(label => (
-                <div key={label} className="flex items-center gap-2">
-                  <div className="flex-1">
-                    <label className={labelClass}>{label}</label>
-                    <input disabled placeholder="$0.00" className={`${inputClass} opacity-50 cursor-not-allowed`} />
-                  </div>
-                  <div className="pt-4"><ComingSoonBadge /></div>
-                </div>
-              ))}
-            </div>
-            <p className="text-[9px] tracking-[0.1em] uppercase text-warm-gray">Advanced pricing rules available in Revenue &amp; Analytics</p>
-          </div>
-        )}
+        {drawerTab === "pricing" && renderPricingTab()}
 
         {drawerTab === "availability" && (
           <div className="space-y-4">
             <a href="/admin/availability" className={`flex items-center gap-2 ${btnOutline} w-full justify-center`}>
               <Calendar size={14} /> Open Calendar Manager
             </a>
+            {/* Show minimum stay from PricingConfig */}
+            {pricingConfig ? (
+              <div className="border border-light-gray p-4">
+                <p className={labelClass}>Minimum Stay</p>
+                <span className="text-sm text-charcoal">{pricingConfig.minimumStay ?? "No minimum"} {pricingConfig.minimumStay ? "nights" : ""}</span>
+                <p className="text-[9px] text-warm-gray mt-1">Set from Pricing tab or Revenue &amp; Analytics</p>
+              </div>
+            ) : (
+              <div className="border border-light-gray p-4">
+                <p className={labelClass}>Minimum Stay</p>
+                <button
+                  onClick={() => {
+                    if (editingListing) loadPricingConfig(editingListing.id);
+                  }}
+                  className="text-xs text-charcoal hover:underline"
+                >
+                  Load from pricing config
+                </button>
+              </div>
+            )}
             <div className="border-t border-light-gray pt-4 space-y-3">
-              {["Minimum Stay", "Maximum Stay", "Same-Day Booking", "Advance Notice"].map(label => (
+              {["Maximum Stay", "Same-Day Booking", "Advance Notice"].map(label => (
                 <div key={label} className="flex items-center gap-2">
                   <div className="flex-1">
                     <label className={labelClass}>{label}</label>
@@ -840,7 +1621,6 @@ export default function AdminListingsPage() {
                 />
                 <div className="w-20 h-20 bg-cream border border-light-gray flex items-center justify-center overflow-hidden shrink-0">
                   {listing.photos.length > 0 ? (
-                    // eslint-disable-next-line @next/next/no-img-element
                     <img src={listing.photos[0]} alt="" className="w-full h-full object-cover" />
                   ) : (
                     <Camera size={20} className="text-warm-gray" />
@@ -908,6 +1688,9 @@ export default function AdminListingsPage() {
                 <div className="flex flex-wrap items-center gap-2 mt-2">
                   <span className="text-[9px] tracking-[0.1em] uppercase font-medium bg-cream px-2 py-0.5 text-charcoal">
                     {listing.amenities.length} amenities
+                  </span>
+                  <span className="text-[9px] tracking-[0.1em] uppercase font-medium bg-cream px-2 py-0.5 text-charcoal flex items-center gap-1">
+                    <Image size={10} /> {listing.photos.length} photos
                   </span>
                   <span className={`text-[9px] tracking-[0.1em] uppercase font-medium px-2 py-0.5 ${
                     listing.active ? "bg-emerald-50 text-accent" : "bg-stone-100 text-warm-gray"

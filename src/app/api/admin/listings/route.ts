@@ -8,7 +8,10 @@ export async function GET() {
 
   const listings = await prisma.listing.findMany({
     orderBy: { createdAt: "asc" },
-    include: { _count: { select: { reservations: true } } },
+    include: {
+      _count: { select: { reservations: true, galleryItems: true } },
+      pricingConfig: true,
+    },
   });
   return NextResponse.json(listings);
 }

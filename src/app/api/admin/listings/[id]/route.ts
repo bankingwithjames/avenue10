@@ -10,20 +10,30 @@ export async function GET(
   if (error) return error;
 
   const { id } = await params;
-  const listing = await prisma.listing.findUnique({
-    where: { id },
-    include: {
-      closedDates: true,
-      pricingConfig: true,
-      galleryItems: {
-        include: { media: true },
-        orderBy: { sortOrder: "asc" },
+  try {
+    const listing = await prisma.listing.findUnique({
+      where: { id },
+      include: {
+        closedDates: true,
+        pricingConfig: true,
+        galleryItems: {
+          include: { media: true },
+          orderBy: { sortOrder: "asc" },
+        },
+        _count: { select: { reservations: true, galleryItems: true } },
       },
-      _count: { select: { reservations: true, galleryItems: true } },
-    },
-  });
-  if (!listing) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json(listing);
+    });
+    if (!listing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return NextResponse.json(listing);
+  } catch (e) {
+    console.error("Listing detail query failed, falling back:", e);
+    const listing = await prisma.listing.findUnique({
+      where: { id },
+      include: { closedDates: true },
+    });
+    if (!listing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return NextResponse.json(listing);
+  }
 }
 
 export async function PUT(

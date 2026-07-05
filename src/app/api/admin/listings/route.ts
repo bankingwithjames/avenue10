@@ -6,14 +6,28 @@ export async function GET() {
   const { error } = await requireAdmin();
   if (error) return error;
 
-  const listings = await prisma.listing.findMany({
-    orderBy: { createdAt: "asc" },
-    include: {
-      _count: { select: { reservations: true, galleryItems: true } },
-      pricingConfig: true,
-    },
-  });
-  return NextResponse.json(listings);
+  try {
+    const listings = await prisma.listing.findMany({
+      orderBy: { createdAt: "asc" },
+      include: {
+        _count: { select: { reservations: true, galleryItems: true } },
+        pricingConfig: true,
+      },
+    });
+    return NextResponse.json(listings);
+  } catch (e) {
+    console.error("Listings query with pricingConfig failed, falling back:", e);
+    try {
+      const listings = await prisma.listing.findMany({
+        orderBy: { createdAt: "asc" },
+        include: { _count: { select: { reservations: true } } },
+      });
+      return NextResponse.json(listings);
+    } catch (e2) {
+      console.error("Listings fallback query also failed:", e2);
+      return NextResponse.json({ error: "Failed to load listings" }, { status: 500 });
+    }
+  }
 }
 
 export async function POST(req: NextRequest) {

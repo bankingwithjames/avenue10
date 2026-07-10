@@ -30,6 +30,7 @@ import {
   HardDrive,
   Ban,
   Bookmark,
+  Download,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -468,6 +469,24 @@ export default function AdminMediaPage() {
     }
   }
 
+  // ─── Download ─────────────────────────────────────────────────────────────
+
+  async function handleDownload(url: string, filename: string) {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+    } catch {
+      window.open(url, "_blank");
+    }
+  }
+
   // ─── Drop Handler ─────────────────────────────────────────────────────────
 
   function handleDrop(e: React.DragEvent) {
@@ -883,6 +902,7 @@ export default function AdminMediaPage() {
               onViewUsage={() => setUsageDrawer(item)}
               onArchive={() => archiveItem(item.id)}
               onRestore={() => restoreItem(item.id)}
+              onDownload={() => handleDownload(item.url, item.originalName)}
               onCopyUrl={() => navigator.clipboard.writeText(item.url)}
               onDelete={() => handleDelete(item.id, item.originalName)}
             />
@@ -952,6 +972,7 @@ export default function AdminMediaPage() {
               <div className="flex gap-1">
                 <button onClick={() => { setAssignDrawer(item); setAssignListing(""); setAssignRoom(""); setAssignPageLocation(""); }} className="text-warm-gray hover:text-charcoal p-1" title="Assign"><Link2 size={12} /></button>
                 <button onClick={() => setUsageDrawer(item)} className="text-warm-gray hover:text-charcoal p-1" title="View Usage"><Eye size={12} /></button>
+                <button onClick={() => handleDownload(item.url, item.originalName)} className="text-warm-gray hover:text-charcoal p-1" title="Download"><Download size={12} /></button>
                 <button onClick={() => navigator.clipboard.writeText(item.url)} className="text-warm-gray hover:text-charcoal p-1" title="Copy URL"><Copy size={12} /></button>
                 <button onClick={() => handleDelete(item.id, item.originalName)} className="text-warm-gray hover:text-red-500 p-1" title="Delete"><Trash2 size={12} /></button>
               </div>
@@ -1634,6 +1655,7 @@ function MediaCard({
   onViewUsage,
   onArchive,
   onRestore,
+  onDownload,
   onCopyUrl,
   onDelete,
 }: {
@@ -1649,6 +1671,7 @@ function MediaCard({
   onViewUsage: () => void;
   onArchive: () => void;
   onRestore: () => void;
+  onDownload: () => void;
   onCopyUrl: () => void;
   onDelete: () => void;
 }) {
@@ -1741,6 +1764,9 @@ function MediaCard({
           </button>
           <button onClick={onViewUsage} className="text-[8px] tracking-[0.08em] uppercase text-warm-gray border border-light-gray px-1.5 py-1 hover:bg-cream transition" title="View Usage">
             <Eye size={10} className="inline mr-0.5" /> Usage
+          </button>
+          <button onClick={onDownload} className="text-[8px] tracking-[0.08em] uppercase text-warm-gray border border-light-gray px-1.5 py-1 hover:bg-cream transition" title="Download">
+            <Download size={10} className="inline mr-0.5" /> Download
           </button>
           {isArchived ? (
             <button onClick={onRestore} className="text-[8px] tracking-[0.08em] uppercase text-warm-gray border border-light-gray px-1.5 py-1 hover:bg-cream transition" title="Restore">

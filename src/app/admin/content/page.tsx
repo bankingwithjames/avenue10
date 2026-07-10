@@ -39,6 +39,8 @@ import {
   ChevronRight,
   Copy,
   BookOpen,
+  Home,
+  Calendar,
 } from "lucide-react";
 
 interface SiteContent {
@@ -90,6 +92,9 @@ interface FieldStyle {
 const contentUsageMap: Record<string, string> = {
   homepage: "Homepage",
   amenities: "Homepage Amenities Section",
+  rooms: "Rooms & Listings Page",
+  listing: "Listing Detail Pages",
+  availability: "Availability Page",
   footer: "Site Footer",
   seo: "All Pages (meta)",
   policies: "Booking Flow, Listing Pages",
@@ -109,7 +114,9 @@ const pageLocationLabels: Record<string, string> = {
 
 const tabs = [
   { key: "homepage", label: "Homepage", icon: Type },
+  { key: "rooms", label: "Rooms", icon: Home },
   { key: "amenities", label: "Amenities", icon: LayoutGrid },
+  { key: "availability", label: "Availability", icon: Calendar },
   { key: "footer", label: "Footer", icon: FileText },
   { key: "seo", label: "SEO & Meta", icon: Globe },
   { key: "policies", label: "Policies", icon: Shield },
@@ -169,6 +176,31 @@ const brandSpacingFields = [
   { key: "brand-section-padding", label: "Section Padding", placeholder: "64px" },
   { key: "brand-content-max-width", label: "Content Max Width", placeholder: "1200px" },
   { key: "brand-letter-spacing", label: "Letter Spacing", placeholder: "0.02em" },
+];
+
+// --- Rooms page field definitions ---
+const roomsFields = [
+  { key: "rooms-subtitle", label: "Page Subtitle", placeholder: "Our Properties", type: "input" as const },
+  { key: "rooms-heading", label: "Page Heading", placeholder: "Rooms & Residences", type: "input" as const },
+  { key: "rooms-description", label: "Page Description", placeholder: "Optional intro paragraph for the rooms page...", type: "textarea" as const },
+  { key: "rooms-empty-message", label: "Empty State Message", placeholder: "No listings available at this time.", type: "input" as const },
+];
+
+const listingDetailFields = [
+  { key: "listing-about-label", label: "\"About\" Section Label", placeholder: "About This Space", type: "input" as const },
+  { key: "listing-amenities-label", label: "\"Amenities\" Section Label", placeholder: "Amenities", type: "input" as const },
+  { key: "listing-gallery-label", label: "\"Gallery\" Section Label", placeholder: "Gallery", type: "input" as const },
+  { key: "listing-booking-heading", label: "Booking Card Heading", placeholder: "Book Your Stay", type: "input" as const },
+];
+
+// --- Availability page field definitions ---
+const availabilityFields = [
+  { key: "availability-subtitle", label: "Page Subtitle", placeholder: "Plan Your Stay", type: "input" as const },
+  { key: "availability-heading", label: "Page Heading", placeholder: "Check Availability", type: "input" as const },
+  { key: "availability-description", label: "Page Description", placeholder: "Select your dates and preferred property to check availability...", type: "textarea" as const },
+  { key: "availability-cta-text", label: "CTA Button Text", placeholder: "Check Dates", type: "input" as const },
+  { key: "availability-note", label: "Availability Note", placeholder: "Minimum 2-night stay required. Contact us for extended stays.", type: "textarea" as const },
+  { key: "availability-contact-text", label: "Contact Prompt", placeholder: "Need help planning? Reach out to us directly.", type: "input" as const },
 ];
 
 // --- Sync mapping from policies to terms ---
@@ -1361,14 +1393,175 @@ export default function AdminContentPage() {
   }
 
   // =============================================
+  // ROOMS TAB
+  // =============================================
+  function renderRoomsTab() {
+    return (
+      <div className="space-y-5">
+        {/* Rooms Page Fields */}
+        <div className="bg-white border border-light-gray">
+          <div className="px-5 py-4 border-b border-light-gray flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Home size={14} className="text-warm-gray" />
+              <span className="text-xs font-medium text-charcoal">Rooms Page Content</span>
+            </div>
+            <span className="text-[7px] tracking-[0.08em] uppercase bg-cream text-warm-gray border border-light-gray px-1.5 py-0.5">
+              Used on: /listings (Rooms Page)
+            </span>
+          </div>
+          <div className="px-5 pb-5 pt-4 space-y-5">
+            {roomsFields.map((field) => {
+              const val = editedValues[field.key] || "";
+              return (
+                <div key={field.key}>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className={labelClass}>{field.label}</label>
+                    <span className="text-[8px] text-warm-gray/50 tabular-nums">{val.length} chars</span>
+                  </div>
+                  {field.type === "textarea" ? (
+                    <>
+                      <RichTextToolbar fieldKey={field.key} />
+                      <textarea
+                        ref={(el) => { textareaRefs.current[field.key] = el; }}
+                        rows={3}
+                        value={val}
+                        onChange={(e) => updateValue(field.key, e.target.value)}
+                        placeholder={field.placeholder}
+                        className={`${inputClass} resize-none`}
+                      />
+                    </>
+                  ) : (
+                    <input
+                      value={val}
+                      onChange={(e) => updateValue(field.key, e.target.value)}
+                      placeholder={field.placeholder}
+                      className={inputClass}
+                    />
+                  )}
+                  <span className="text-[8px] text-warm-gray/60 mt-0.5 block">Key: {field.key}</span>
+                  <FieldStyleControls fieldKey={field.key} />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Listing Detail Fields */}
+        <div className="bg-white border border-light-gray">
+          <div className="px-5 py-4 border-b border-light-gray flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <FileText size={14} className="text-warm-gray" />
+              <span className="text-xs font-medium text-charcoal">Listing Detail Page Labels</span>
+            </div>
+            <span className="text-[7px] tracking-[0.08em] uppercase bg-cream text-warm-gray border border-light-gray px-1.5 py-0.5">
+              Used on: /listings/[slug] (Detail Pages)
+            </span>
+          </div>
+          <div className="px-5 pb-5 pt-4 space-y-5">
+            {listingDetailFields.map((field) => {
+              const val = editedValues[field.key] || "";
+              return (
+                <div key={field.key}>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className={labelClass}>{field.label}</label>
+                    <span className="text-[8px] text-warm-gray/50 tabular-nums">{val.length} chars</span>
+                  </div>
+                  <input
+                    value={val}
+                    onChange={(e) => updateValue(field.key, e.target.value)}
+                    placeholder={field.placeholder}
+                    className={inputClass}
+                  />
+                  <span className="text-[8px] text-warm-gray/60 mt-0.5 block">Key: {field.key}</span>
+                  <FieldStyleControls fieldKey={field.key} />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="bg-cream/50 border border-light-gray px-5 py-4">
+          <p className="text-[10px] text-warm-gray leading-relaxed">
+            Rooms page content controls the /listings browse page. Listing detail labels control the section headings on individual property pages (/listings/[slug]). Leave fields empty to use default values.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // =============================================
+  // AVAILABILITY TAB
+  // =============================================
+  function renderAvailabilityTab() {
+    return (
+      <div className="bg-white border border-light-gray">
+        <div className="px-5 py-4 border-b border-light-gray flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Calendar size={14} className="text-warm-gray" />
+            <span className="text-xs font-medium text-charcoal">Availability Page Content</span>
+          </div>
+          <span className="text-[7px] tracking-[0.08em] uppercase bg-cream text-warm-gray border border-light-gray px-1.5 py-0.5">
+            Used on: /availability
+          </span>
+        </div>
+        <div className="px-5 pb-5 pt-4 space-y-5">
+          {availabilityFields.map((field) => {
+            const val = editedValues[field.key] || "";
+            return (
+              <div key={field.key}>
+                <div className="flex items-center justify-between mb-1">
+                  <label className={labelClass}>{field.label}</label>
+                  <span className="text-[8px] text-warm-gray/50 tabular-nums">{val.length} chars</span>
+                </div>
+                {field.type === "textarea" ? (
+                  <>
+                    <RichTextToolbar fieldKey={field.key} />
+                    <textarea
+                      ref={(el) => { textareaRefs.current[field.key] = el; }}
+                      rows={3}
+                      value={val}
+                      onChange={(e) => updateValue(field.key, e.target.value)}
+                      placeholder={field.placeholder}
+                      className={`${inputClass} resize-none`}
+                    />
+                  </>
+                ) : (
+                  <input
+                    value={val}
+                    onChange={(e) => updateValue(field.key, e.target.value)}
+                    placeholder={field.placeholder}
+                    className={inputClass}
+                  />
+                )}
+                <span className="text-[8px] text-warm-gray/60 mt-0.5 block">Key: {field.key}</span>
+                <FieldStyleControls fieldKey={field.key} />
+              </div>
+            );
+          })}
+
+          <div className="border-t border-light-gray pt-4 mt-4">
+            <p className="text-[10px] text-warm-gray leading-relaxed">
+              Availability page content controls text on the /availability page where guests can check property availability and select dates. Leave fields empty to use default values.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // =============================================
   // RENDER ACTIVE TAB
   // =============================================
   function renderTabContent() {
     switch (activeTab) {
       case "homepage":
         return renderContentSection("homepage");
+      case "rooms":
+        return renderRoomsTab();
       case "amenities":
         return renderContentSection("amenities");
+      case "availability":
+        return renderAvailabilityTab();
       case "footer":
         return renderContentSection("footer");
       case "page-media":
@@ -1565,6 +1758,10 @@ export default function AdminContentPage() {
           const count =
             tab.key === "homepage" || tab.key === "amenities" || tab.key === "footer"
               ? sectionFieldCounts[tab.key] || 0
+              : tab.key === "rooms"
+              ? roomsFields.length + listingDetailFields.length
+              : tab.key === "availability"
+              ? availabilityFields.length
               : null;
           return (
             <button

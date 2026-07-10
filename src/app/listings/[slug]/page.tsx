@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getPageMedia } from "@/lib/content";
+import { getPageMedia, getSiteContent } from "@/lib/content";
 import { notFound } from "next/navigation";
 import { BedDouble, Bath, Users, Check } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
@@ -15,12 +15,13 @@ export default async function ListingDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const [listing, pageMedia] = await Promise.all([
+  const [listing, pageMedia, content] = await Promise.all([
     prisma.listing.findUnique({
       where: { slug },
       include: { closedDates: true },
     }),
     getPageMedia(),
+    getSiteContent(),
   ]);
 
   if (!listing) notFound();
@@ -83,7 +84,7 @@ export default async function ListingDetailPage({
             <div className="md:col-span-2 space-y-12">
               <div>
                 <p className="text-[10px] tracking-[0.3em] uppercase text-warm-gray mb-4 font-medium">
-                  About This Space
+                  {content["listing-about-label"] || "About This Space"}
                 </p>
                 <p className="text-charcoal/80 leading-relaxed whitespace-pre-line">
                   {listing.description}
@@ -93,7 +94,7 @@ export default async function ListingDetailPage({
               {listing.amenities.length > 0 && (
                 <div>
                   <p className="text-[10px] tracking-[0.3em] uppercase text-warm-gray mb-6 font-medium">
-                    Amenities
+                    {content["listing-amenities-label"] || "Amenities"}
                   </p>
                   <div className="grid grid-cols-2 gap-3">
                     {listing.amenities.map((amenity: string) => (

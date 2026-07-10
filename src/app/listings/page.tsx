@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { getPageMedia } from "@/lib/content";
+import { getPageMedia, getSiteContent } from "@/lib/content";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { BedDouble, Bath, Users } from "lucide-react";
@@ -20,9 +20,10 @@ function MediaElement({ src, className }: { src: string; className?: string }) {
 }
 
 export default async function ListingsPage() {
-  const [listings, pageMedia] = await Promise.all([
+  const [listings, pageMedia, content] = await Promise.all([
     prisma.listing.findMany({ where: { active: true }, orderBy: { createdAt: "asc" } }),
     getPageMedia(),
+    getSiteContent(),
   ]);
 
   return (
@@ -32,15 +33,21 @@ export default async function ListingsPage() {
       <div className="pt-20 bg-white min-h-screen">
         <div className="max-w-[1400px] mx-auto px-6 md:px-12 lg:px-16 py-16 md:py-24">
           <p className="text-[10px] tracking-[0.3em] uppercase text-warm-gray mb-3 font-medium">
-            Our Properties
+            {content["rooms-subtitle"] || "Our Properties"}
           </p>
-          <h1 className="font-serif text-4xl md:text-5xl text-charcoal font-light mb-16">
-            Rooms & Residences
+          <h1 className="font-serif text-4xl md:text-5xl text-charcoal font-light mb-4">
+            {content["rooms-heading"] || "Rooms & Residences"}
           </h1>
+          {content["rooms-description"] && (
+            <p className="text-warm-gray text-sm leading-relaxed max-w-2xl mb-16">
+              {content["rooms-description"]}
+            </p>
+          )}
+          {!content["rooms-description"] && <div className="mb-16" />}
 
           {listings.length === 0 ? (
             <p className="text-warm-gray text-center py-20">
-              No listings available at this time.
+              {content["rooms-empty-message"] || "No listings available at this time."}
             </p>
           ) : (
             <div className="space-y-20">

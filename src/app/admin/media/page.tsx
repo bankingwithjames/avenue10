@@ -471,20 +471,9 @@ export default function AdminMediaPage() {
 
   // ─── Download ─────────────────────────────────────────────────────────────
 
-  async function handleDownload(url: string, filename: string) {
-    try {
-      const res = await fetch(url);
-      const blob = await res.blob();
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(a.href);
-    } catch {
-      window.open(url, "_blank");
-    }
+  function handleDownload(url: string, filename: string) {
+    const downloadUrl = `/api/admin/media/download?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
+    window.open(downloadUrl, "_blank");
   }
 
   // ─── Drop Handler ─────────────────────────────────────────────────────────

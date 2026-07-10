@@ -41,6 +41,8 @@ model Listing {
   pricingRules  PricingRule[]
   pricingLogs   PricingChangeLog[]
   contentLinks  ListingContentLink[]
+  bookingQuotes BookingQuote[]
+  bookingRule   BookingRule?
 }
 
 model Media {
@@ -117,10 +119,31 @@ model Reservation {
   portalToken   String?  @unique
   portalExpires DateTime?
   portalRevoked Boolean  @default(false)
+
+  quoteId          String?
+  guestId          String?
+  bookingMode      String?
+  nightlyBreakdown Json?
+  subtotal         Float?
+  cleaningFeeCharged Float?
+  petFeeCharged    Float?
+  extraGuestFeeCharged Float?
+  taxAmount        Float?
+  paymentStatus    String   @default("none")
+  depositAmount    Float?
+  depositPaidAt    DateTime?
+  confirmationCode String?  @unique
+  adminNotes       String?
+  approvedBy       String?
+  approvedAt       DateTime?
+  declinedReason   String?
+
   agreement     ReservationAgreement?
   guestRequests GuestRequest[]
   guestReviews  GuestReview[]
   portalLogs    GuestPortalLog[]
+  notifications BookingNotification[]
+  checkoutSession CheckoutSession?
 }
 
 model ReservationAgreement {
@@ -810,6 +833,90 @@ model CleanerInventoryCheck {
 
   @@index([propertyId])
   @@index([itemId])
+}
+
+// ─── Booking Workflow ─────────────────────────────────────────────────
+
+model BookingQuote {
+  id               String   @id @default(cuid())
+  listingId        String
+  listing          Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  checkIn          DateTime
+  checkOut         DateTime
+  guests           Int
+  nights           Int
+  nightlyBreakdown Json
+  subtotal         Float
+  cleaningFee      Float    @default(0)
+  petFee           Float    @default(0)
+  extraGuestFee    Float    @default(0)
+  taxAmount        Float    @default(0)
+  total            Float
+  currency         String   @default("USD")
+  status           String   @default("active")
+  expiresAt        DateTime
+  createdAt        DateTime @default(now())
+
+  checkoutSession  CheckoutSession?
+
+  @@index([listingId])
+  @@index([status, expiresAt])
+}
+
+model BookingRule {
+  id                    String   @id @default(cuid())
+  listingId             String   @unique
+  listing               Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  bookingMode           String   @default("request_to_book")
+  requireIdVerification Boolean  @default(false)
+  requireAgreement      Boolean  @default(true)
+  depositPercent        Float    @default(0)
+  depositFlat           Float    @default(0)
+  cancellationPolicy    String   @default("flexible")
+  minAdvanceDays        Int      @default(0)
+  maxAdvanceDays        Int      @default(365)
+  instantBookMaxNights  Int?
+  autoApproveReturning  Boolean  @default(false)
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model CheckoutSession {
+  id              String   @id @default(cuid())
+  quoteId         String   @unique
+  quote           BookingQuote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  reservationId   String?  @unique
+  reservation     Reservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  step            String   @default("guest_info")
+  guestFirstName  String?
+  guestLastName   String?
+  guestEmail      String?
+  guestPhone      String?
+  specialRequests String?
+  status          String   @default("in_progress")
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status, expiresAt])
+}
+
+model BookingNotification {
+  id            String    @id @default(cuid())
+  reservationId String
+  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  type          String
+  channel       String    @default("email")
+  recipient     String
+  subject       String?
+  body          String?
+  status        String    @default("pending")
+  sentAt        DateTime?
+  error         String?
+  createdAt     DateTime  @default(now())
+
+  @@index([reservationId])
 }
 
 // ─── Guest CRM System ─────────────────────────────────────────────────

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 
 interface BookingFormProps {
   listingId: string;
@@ -15,17 +17,13 @@ export function BookingForm({
   pricePerNight,
   cleaningFee,
   maxGuests,
-  closedDates,
 }: BookingFormProps) {
+  const router = useRouter();
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
   const [guests, setGuests] = useState(1);
-  const [guestName, setGuestName] = useState("");
-  const [guestEmail, setGuestEmail] = useState("");
-  const [guestPhone, setGuestPhone] = useState("");
-  const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [error, setError] = useState("");
 
   const nights =
     checkIn && checkOut
@@ -38,45 +36,29 @@ export function BookingForm({
         )
       : 0;
 
-  const total = nights * pricePerNight + (nights > 0 ? cleaningFee : 0);
+  const estimatedTotal = nights * pricePerNight + (nights > 0 ? cleaningFee : 0);
   const today = new Date().toISOString().split("T")[0];
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
-    setResult(null);
+    setError("");
 
     try {
-      const res = await fetch("/api/reservations", {
+      const res = await fetch("/api/booking/quote", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          listingId,
-          checkIn,
-          checkOut,
-          guests,
-          guestName,
-          guestEmail,
-          guestPhone,
-          notes,
-        }),
+        body: JSON.stringify({ listingId, checkIn, checkOut, guests }),
       });
       const data = await res.json();
-      if (res.ok) {
-        setResult({ ok: true, message: "Request submitted. We'll confirm shortly." });
-        setCheckIn("");
-        setCheckOut("");
-        setGuests(1);
-        setGuestName("");
-        setGuestEmail("");
-        setGuestPhone("");
-        setNotes("");
-      } else {
-        setResult({ ok: false, message: data.error || "Something went wrong." });
+      if (!res.ok) {
+        setError(data.error || "Something went wrong.");
+        setSubmitting(false);
+        return;
       }
+      router.push(`/checkout/${data.quote.id}`);
     } catch {
-      setResult({ ok: false, message: "Network error. Please try again." });
-    } finally {
+      setError("Network error. Please try again.");
       setSubmitting(false);
     }
   }
@@ -141,67 +123,33 @@ export function BookingForm({
             </div>
           )}
           <div className="flex justify-between font-medium text-charcoal pt-1">
-            <span>Total</span>
-            <span>${total}</span>
+            <span>Estimated Total</span>
+            <span>${estimatedTotal}</span>
           </div>
+          <p className="text-[10px] text-warm-gray/70 pt-1">
+            Final pricing calculated at checkout
+          </p>
         </div>
       )}
 
-      <div>
-        <label className={labelClass}>Full Name</label>
-        <input
-          type="text"
-          required
-          value={guestName}
-          onChange={(e) => setGuestName(e.target.value)}
-          className={inputClass}
-        />
-      </div>
-
-      <div>
-        <label className={labelClass}>Email</label>
-        <input
-          type="email"
-          required
-          value={guestEmail}
-          onChange={(e) => setGuestEmail(e.target.value)}
-          className={inputClass}
-        />
-      </div>
-
-      <div>
-        <label className={labelClass}>Phone (optional)</label>
-        <input
-          type="tel"
-          value={guestPhone}
-          onChange={(e) => setGuestPhone(e.target.value)}
-          className={inputClass}
-        />
-      </div>
-
-      <div>
-        <label className={labelClass}>Notes (optional)</label>
-        <textarea
-          rows={2}
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          className={`${inputClass} resize-none`}
-        />
-      </div>
+      {error && (
+        <p className="text-xs text-red-500 text-center">{error}</p>
+      )}
 
       <button
         type="submit"
         disabled={submitting || nights === 0}
         className="w-full border border-charcoal text-charcoal text-[11px] tracking-[0.2em] uppercase py-3.5 hover:bg-charcoal hover:text-white transition-all duration-300 font-medium disabled:opacity-30 disabled:cursor-not-allowed mt-2"
       >
-        {submitting ? "Submitting..." : "Request to Book"}
+        {submitting ? (
+          <span className="flex items-center justify-center gap-2">
+            <Loader2 size={14} className="animate-spin" />
+            Loading...
+          </span>
+        ) : (
+          "Book Now"
+        )}
       </button>
-
-      {result && (
-        <p className={`text-xs text-center ${result.ok ? "text-accent" : "text-red-500"}`}>
-          {result.message}
-        </p>
-      )}
     </form>
   );
 }

@@ -14,7 +14,7 @@ import {
   DoorOpen,
   BarChart3,
   Plug,
-
+  ClipboardList,
   Users,
   Sparkles,
   Package,
@@ -36,6 +36,7 @@ const navSections: NavSection[] = [
     label: "Operations",
     items: [
       { href: "/admin/listings", label: "Listings", icon: Home },
+      { href: "/admin/reservations", label: "Reservations", icon: ClipboardList },
       { href: "/admin/availability", label: "Calendar", icon: Calendar },
       { href: "/admin/guests", label: "Guests", icon: Users },
       { href: "/admin/tasks", label: "Tasks & Cleaning", icon: Sparkles },

@@ -26,6 +26,9 @@ export const metadata: Metadata = {
   title: "AVENUE10 | Short-Term Residences",
   description:
     "Curated short-term stays at Avenue10. A Main Home and Garage Apartment designed for comfort, privacy, and style.",
+  other: {
+    "p:domain_verify": "393b17aee9f885b4dc82bda630a93c54",
+  },
 };
 
 export default function RootLayout({

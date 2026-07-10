@@ -118,23 +118,26 @@ export async function POST(req: NextRequest) {
       data: { status: "converted" },
     });
 
-    let guest = await prisma.guest.findUnique({ where: { email } });
-    if (!guest) {
-      guest = await prisma.guest.create({
-        data: {
-          firstName,
-          lastName,
-          email,
-          phone: phone || null,
-          source: "booking",
-        },
+    try {
+      let guest = await prisma.guest.findUnique({ where: { email } });
+      if (!guest) {
+        guest = await prisma.guest.create({
+          data: {
+            firstName,
+            lastName,
+            email,
+            phone: phone || null,
+            source: "booking",
+          },
+        });
+      }
+      await prisma.reservation.update({
+        where: { id: reservation.id },
+        data: { guestId: guest.id },
       });
+    } catch (guestErr) {
+      console.error("Guest profile creation failed (non-blocking):", guestErr);
     }
-
-    await prisma.reservation.update({
-      where: { id: reservation.id },
-      data: { guestId: guest.id },
-    });
 
     if (status === "confirmed") {
       const dates: Date[] = [];

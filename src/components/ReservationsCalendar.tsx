@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import Link from "next/link";
-import { ChevronLeft, ChevronRight, BedDouble, Bath, Users } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ChevronLeft, ChevronRight, BedDouble, Bath, Users, Loader2 } from "lucide-react";
 
 interface ListingData {
   id: string;
@@ -22,17 +22,26 @@ function toDateKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function isDateInRange(dateKey: string, checkIn: string, checkOut: string) {
-  return dateKey >= checkIn && dateKey < checkOut;
+function daysBetween(a: string, b: string) {
+  return Math.ceil(
+    (new Date(b + "T00:00:00").getTime() - new Date(a + "T00:00:00").getTime()) /
+      (1000 * 60 * 60 * 24)
+  );
 }
 
 export function ReservationsCalendar({ listings }: { listings: ListingData[] }) {
+  const router = useRouter();
   const today = new Date();
   const todayKey = toDateKey(today);
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
   const [selectedListing, setSelectedListing] = useState<string>(listings[0]?.id ?? "");
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [checkIn, setCheckIn] = useState<string | null>(null);
+  const [checkOut, setCheckOut] = useState<string | null>(null);
+  const [hoverDate, setHoverDate] = useState<string | null>(null);
+  const [guests, setGuests] = useState(1);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
   const listing = listings.find((l) => l.id === selectedListing) ?? listings[0];
 
@@ -63,6 +72,91 @@ export function ReservationsCalendar({ listings }: { listings: ListingData[] }) 
     return "available";
   }
 
+  function isInSelectedRange(dateKey: string) {
+    if (!checkIn) return false;
+    const end = checkOut || hoverDate;
+    if (!end) return dateKey === checkIn;
+    const rangeStart = checkIn < end ? checkIn : end;
+    const rangeEnd = checkIn < end ? end : checkIn;
+    return dateKey >= rangeStart && dateKey <= rangeEnd;
+  }
+
+  function hasBlockedInRange(start: string, end: string) {
+    const s = new Date(start + "T00:00:00");
+    const e = new Date(end + "T00:00:00");
+    const d = new Date(s);
+    while (d < e) {
+      const key = toDateKey(d);
+      const status = getDateStatus(key);
+      if (status === "booked" || status === "blocked") return true;
+      d.setDate(d.getDate() + 1);
+    }
+    return false;
+  }
+
+  function handleDateClick(dateKey: string) {
+    const status = getDateStatus(dateKey);
+    if (status !== "available") return;
+
+    if (!checkIn || (checkIn && checkOut)) {
+      setCheckIn(dateKey);
+      setCheckOut(null);
+      setError("");
+    } else {
+      if (dateKey === checkIn) {
+        setCheckIn(null);
+        return;
+      }
+      const start = dateKey > checkIn ? checkIn : dateKey;
+      const end = dateKey > checkIn ? dateKey : checkIn;
+
+      if (hasBlockedInRange(start, end)) {
+        setError("Your selected range includes unavailable dates. Please choose different dates.");
+        return;
+      }
+
+      if (start === checkIn) {
+        setCheckOut(end);
+      } else {
+        setCheckIn(start);
+        setCheckOut(end);
+      }
+      setError("");
+    }
+  }
+
+  const nights = checkIn && checkOut ? daysBetween(checkIn, checkOut) : 0;
+  const estimatedTotal = nights > 0 ? nights * listing.pricePerNight + listing.cleaningFee : 0;
+
+  async function handleBookNow() {
+    if (!checkIn || !checkOut || !listing) return;
+    setSubmitting(true);
+    setError("");
+
+    try {
+      const res = await fetch("/api/booking/quote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          listingId: listing.id,
+          checkIn,
+          checkOut,
+          guests,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to create quote");
+        setSubmitting(false);
+        return;
+      }
+      router.push(`/checkout/${data.quote.id}`);
+    } catch {
+      setError("Network error. Please try again.");
+      setSubmitting(false);
+    }
+  }
+
   const firstDay = new Date(currentYear, currentMonth, 1);
   const startDow = firstDay.getDay();
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
@@ -79,7 +173,6 @@ export function ReservationsCalendar({ listings }: { listings: ListingData[] }) 
     } else {
       setCurrentMonth(currentMonth - 1);
     }
-    setSelectedDate(null);
   }
 
   function nextMonth() {
@@ -89,12 +182,8 @@ export function ReservationsCalendar({ listings }: { listings: ListingData[] }) 
     } else {
       setCurrentMonth(currentMonth + 1);
     }
-    setSelectedDate(null);
   }
 
-  const selectedStatus = selectedDate ? getDateStatus(selectedDate) : null;
-
-  // Count available nights this month
   const availableCount = useMemo(() => {
     let count = 0;
     for (let d = 1; d <= daysInMonth; d++) {
@@ -102,6 +191,7 @@ export function ReservationsCalendar({ listings }: { listings: ListingData[] }) 
       if (getDateStatus(key) === "available") count++;
     }
     return count;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentMonth, currentYear, daysInMonth, bookedSet, closedSet]);
 
   if (!listing) {
@@ -120,7 +210,13 @@ export function ReservationsCalendar({ listings }: { listings: ListingData[] }) 
             </label>
             <select
               value={selectedListing}
-              onChange={(e) => { setSelectedListing(e.target.value); setSelectedDate(null); }}
+              onChange={(e) => {
+                setSelectedListing(e.target.value);
+                setCheckIn(null);
+                setCheckOut(null);
+                setGuests(1);
+                setError("");
+              }}
               className="bg-white border border-light-gray text-charcoal text-sm px-4 py-2.5 w-full max-w-sm outline-none focus:border-charcoal/40 transition"
             >
               {listings.map((l) => (
@@ -130,22 +226,27 @@ export function ReservationsCalendar({ listings }: { listings: ListingData[] }) 
           </div>
         )}
 
+        {/* Selection Instructions */}
+        <div className="bg-white border border-light-gray px-5 py-3">
+          <p className="text-xs text-charcoal/60">
+            {!checkIn
+              ? "Select your check-in date on the calendar"
+              : !checkOut
+              ? "Now select your check-out date"
+              : `${nights} night${nights > 1 ? "s" : ""} selected — ${new Date(checkIn + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })} to ${new Date(checkOut + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`}
+          </p>
+        </div>
+
         {/* Month Nav */}
         <div className="bg-white border border-light-gray">
           <div className="flex items-center justify-between px-6 py-4 border-b border-light-gray">
-            <button
-              onClick={prevMonth}
-              className="p-1.5 hover:bg-cream transition rounded"
-            >
+            <button onClick={prevMonth} className="p-1.5 hover:bg-cream transition rounded">
               <ChevronLeft size={18} className="text-charcoal" />
             </button>
             <h2 className="text-sm tracking-[0.15em] uppercase font-medium text-charcoal">
               {monthLabel}
             </h2>
-            <button
-              onClick={nextMonth}
-              className="p-1.5 hover:bg-cream transition rounded"
-            >
+            <button onClick={nextMonth} className="p-1.5 hover:bg-cream transition rounded">
               <ChevronRight size={18} className="text-charcoal" />
             </button>
           </div>
@@ -168,8 +269,11 @@ export function ReservationsCalendar({ listings }: { listings: ListingData[] }) 
 
               const dateKey = toDateKey(new Date(currentYear, currentMonth, day));
               const status = getDateStatus(dateKey);
-              const isSelected = selectedDate === dateKey;
               const isToday = dateKey === todayKey;
+              const isCheckIn = dateKey === checkIn;
+              const isCheckOut = dateKey === checkOut;
+              const inRange = isInSelectedRange(dateKey);
+              const isEndpoint = isCheckIn || isCheckOut;
 
               let bgClass = "bg-white hover:bg-cream";
               let textClass = "text-charcoal";
@@ -187,29 +291,40 @@ export function ReservationsCalendar({ listings }: { listings: ListingData[] }) 
                 bgClass = "bg-red-50/50";
                 textClass = "text-red-300";
                 priceColor = "text-red-300";
-              } else if (isSelected) {
+              } else if (isEndpoint) {
                 bgClass = "bg-charcoal";
                 textClass = "text-white";
                 priceColor = "text-white/70";
+              } else if (inRange) {
+                bgClass = "bg-charcoal/10";
+                textClass = "text-charcoal";
+                priceColor = "text-emerald-700";
               }
 
               return (
                 <button
                   key={dateKey}
-                  onClick={() => status !== "past" ? setSelectedDate(isSelected ? null : dateKey) : undefined}
+                  onClick={() => handleDateClick(dateKey)}
+                  onMouseEnter={() => {
+                    if (checkIn && !checkOut && status === "available") {
+                      setHoverDate(dateKey);
+                    }
+                  }}
+                  onMouseLeave={() => setHoverDate(null)}
                   disabled={status === "past"}
-                  className={`aspect-square border-b border-r border-light-gray/50 flex flex-col items-center justify-center gap-0.5 transition relative ${bgClass} ${status === "past" ? "cursor-default" : "cursor-pointer"}`}
+                  className={`aspect-square border-b border-r border-light-gray/50 flex flex-col items-center justify-center gap-0.5 transition relative ${bgClass} ${status === "past" ? "cursor-default" : status === "booked" || status === "blocked" ? "cursor-not-allowed" : "cursor-pointer"}`}
                 >
-                  {isToday && (
+                  {isToday && !isEndpoint && (
                     <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-charcoal" />
                   )}
-                  <span className={`text-sm font-light ${textClass}`}>{day}</span>
-                  {status === "available" && !isSelected && (
-                    <span className={`text-[9px] font-medium ${priceColor}`}>
-                      ${listing.pricePerNight}
-                    </span>
+                  {isCheckIn && (
+                    <div className="absolute top-0.5 left-0 right-0 text-[7px] tracking-wider uppercase text-white/80 font-medium">In</div>
                   )}
-                  {status === "available" && isSelected && (
+                  {isCheckOut && (
+                    <div className="absolute top-0.5 left-0 right-0 text-[7px] tracking-wider uppercase text-white/80 font-medium">Out</div>
+                  )}
+                  <span className={`text-sm font-light ${textClass}`}>{day}</span>
+                  {status === "available" && (
                     <span className={`text-[9px] font-medium ${priceColor}`}>
                       ${listing.pricePerNight}
                     </span>
@@ -233,6 +348,10 @@ export function ReservationsCalendar({ listings }: { listings: ListingData[] }) 
             <span>Available</span>
           </div>
           <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-charcoal/10 border border-light-gray" />
+            <span>Selected Range</span>
+          </div>
+          <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-charcoal/5 border border-light-gray" />
             <span>Booked</span>
           </div>
@@ -241,12 +360,8 @@ export function ReservationsCalendar({ listings }: { listings: ListingData[] }) 
             <span>Unavailable</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-gray-50 border border-light-gray" />
-            <span>Past</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-charcoal" />
-            <span>Today</span>
+            <div className="w-3 h-3 bg-charcoal" />
+            <span>Check-in / Check-out</span>
           </div>
         </div>
 
@@ -267,7 +382,7 @@ export function ReservationsCalendar({ listings }: { listings: ListingData[] }) 
         </div>
       </div>
 
-      {/* Right: Property Info & Selected Date */}
+      {/* Right: Booking Panel */}
       <div className="space-y-6">
         {/* Property Card */}
         <div className="bg-white border border-light-gray p-6">
@@ -297,89 +412,129 @@ export function ReservationsCalendar({ listings }: { listings: ListingData[] }) 
           </div>
         </div>
 
-        {/* Selected Date Panel */}
-        {selectedDate && (
-          <div className="bg-white border border-light-gray p-6">
-            <p className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium mb-3">
-              Selected Date
-            </p>
-            <p className="font-serif text-lg text-charcoal mb-3">
-              {new Date(selectedDate + "T12:00:00").toLocaleDateString("en-US", {
-                weekday: "long",
-                month: "long",
-                day: "numeric",
-                year: "numeric",
-              })}
-            </p>
-            {selectedStatus === "available" && (
-              <>
-                <div className="space-y-2 text-sm border-t border-light-gray pt-3">
-                  <div className="flex justify-between">
-                    <span className="text-warm-gray">Nightly Rate</span>
-                    <span className="text-charcoal font-medium">${listing.pricePerNight}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-warm-gray">Cleaning Fee</span>
-                    <span className="text-charcoal font-medium">${listing.cleaningFee}</span>
-                  </div>
-                  <div className="flex justify-between border-t border-light-gray pt-2">
-                    <span className="text-charcoal font-medium">Est. 1-Night Total</span>
-                    <span className="text-charcoal font-medium">${listing.pricePerNight + listing.cleaningFee}</span>
-                  </div>
-                </div>
-                <p className="text-[10px] text-emerald-600 mt-3 font-medium uppercase tracking-wider">
-                  &#10003; Available
-                </p>
-              </>
-            )}
-            {selectedStatus === "booked" && (
-              <p className="text-xs text-warm-gray mt-1">
-                This date is currently booked. Please select another date.
-              </p>
-            )}
-            {selectedStatus === "blocked" && (
-              <p className="text-xs text-warm-gray mt-1">
-                This date is not available. Please select another date.
-              </p>
-            )}
-          </div>
-        )}
+        {/* Booking Summary */}
+        <div className="bg-white border border-light-gray p-6">
+          <p className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium mb-4">
+            Your Reservation
+          </p>
 
-        {/* Book Now CTA */}
-        <Link
-          href={`/listings/${listing.slug}`}
-          className="block w-full border border-charcoal text-charcoal text-center text-[11px] tracking-[0.2em] uppercase py-3.5 hover:bg-charcoal hover:text-white transition-all duration-300 font-medium"
-        >
-          View Details & Book
-        </Link>
+          {/* Date display */}
+          <div className="grid grid-cols-2 gap-3 mb-5">
+            <div className={`border px-3 py-2.5 ${checkIn ? "border-charcoal/30" : "border-light-gray"}`}>
+              <p className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium mb-0.5">Check-in</p>
+              <p className="text-sm text-charcoal">
+                {checkIn
+                  ? new Date(checkIn + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                  : "—"}
+              </p>
+            </div>
+            <div className={`border px-3 py-2.5 ${checkOut ? "border-charcoal/30" : "border-light-gray"}`}>
+              <p className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium mb-0.5">Check-out</p>
+              <p className="text-sm text-charcoal">
+                {checkOut
+                  ? new Date(checkOut + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                  : "—"}
+              </p>
+            </div>
+          </div>
+
+          {/* Guest selector */}
+          <div className="mb-5">
+            <label className="text-[9px] tracking-[0.2em] uppercase text-warm-gray font-medium mb-1.5 block">
+              Guests
+            </label>
+            <select
+              value={guests}
+              onChange={(e) => setGuests(Number(e.target.value))}
+              className="w-full border border-light-gray text-charcoal text-sm px-3 py-2.5 outline-none focus:border-charcoal/40 transition bg-white"
+            >
+              {Array.from({ length: listing.maxGuests }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={n}>
+                  {n} guest{n > 1 ? "s" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Price breakdown */}
+          {nights > 0 && (
+            <div className="space-y-2 text-sm border-t border-light-gray pt-4 mb-5">
+              <div className="flex justify-between text-charcoal/60">
+                <span>${listing.pricePerNight} &times; {nights} night{nights > 1 ? "s" : ""}</span>
+                <span>${nights * listing.pricePerNight}</span>
+              </div>
+              {listing.cleaningFee > 0 && (
+                <div className="flex justify-between text-charcoal/60">
+                  <span>Cleaning fee</span>
+                  <span>${listing.cleaningFee}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-medium text-charcoal border-t border-light-gray pt-2">
+                <span>Estimated Total</span>
+                <span>${estimatedTotal}</span>
+              </div>
+              <p className="text-[10px] text-warm-gray/70">
+                Final pricing calculated at checkout
+              </p>
+            </div>
+          )}
+
+          {error && (
+            <p className="text-xs text-red-500 mb-4">{error}</p>
+          )}
+
+          <button
+            onClick={handleBookNow}
+            disabled={!checkIn || !checkOut || submitting}
+            className="w-full bg-charcoal text-white text-[10px] tracking-[0.15em] uppercase py-3.5 hover:bg-stone transition-all duration-300 font-medium disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            {submitting ? (
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 size={14} className="animate-spin" />
+                Creating Quote...
+              </span>
+            ) : !checkIn ? (
+              "Select Dates to Book"
+            ) : !checkOut ? (
+              "Select Check-out Date"
+            ) : (
+              "Continue to Checkout"
+            )}
+          </button>
+
+          {checkIn && (
+            <button
+              onClick={() => {
+                setCheckIn(null);
+                setCheckOut(null);
+                setError("");
+              }}
+              className="w-full text-center text-[10px] text-warm-gray hover:text-charcoal transition mt-3 uppercase tracking-[0.1em]"
+            >
+              Clear Dates
+            </button>
+          )}
+        </div>
 
         {/* Quick Estimate */}
-        <div className="bg-white border border-light-gray p-6">
-          <p className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium mb-3">
-            Quick Estimate
-          </p>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-warm-gray">2 nights</span>
-              <span className="text-charcoal">${listing.pricePerNight * 2 + listing.cleaningFee}</span>
+        {!checkIn && (
+          <div className="bg-white border border-light-gray p-6">
+            <p className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium mb-3">
+              Quick Estimate
+            </p>
+            <div className="space-y-2 text-sm">
+              {[2, 3, 5, 7].map((n) => (
+                <div key={n} className="flex justify-between">
+                  <span className="text-warm-gray">{n} nights</span>
+                  <span className="text-charcoal">${n * listing.pricePerNight + listing.cleaningFee}</span>
+                </div>
+              ))}
             </div>
-            <div className="flex justify-between">
-              <span className="text-warm-gray">3 nights</span>
-              <span className="text-charcoal">${listing.pricePerNight * 3 + listing.cleaningFee}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-warm-gray">5 nights</span>
-              <span className="text-charcoal">${listing.pricePerNight * 5 + listing.cleaningFee}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-warm-gray">7 nights</span>
-              <span className="text-charcoal">${listing.pricePerNight * 7 + listing.cleaningFee}</span>
-            </div>
+            <p className="text-[10px] text-warm-gray mt-3">
+              Estimates include ${listing.cleaningFee} cleaning fee
+            </p>
           </div>
-          <p className="text-[10px] text-warm-gray mt-3">
-            Estimates include ${listing.cleaningFee} cleaning fee
-          </p>
-        </div>
+        )}
       </div>
     </div>
   );

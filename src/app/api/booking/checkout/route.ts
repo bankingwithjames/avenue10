@@ -206,8 +206,28 @@ export async function POST(req: NextRequest) {
       console.error("Guest profile creation failed (non-blocking):", guestErr);
     }
 
-    // Date blocking is handled exclusively by admin confirmation
-    // via src/app/api/admin/reservations/[id]/route.ts
+    // Create locked agreement snapshot
+    try {
+      await prisma.bookingAgreementSnapshot.create({
+        data: {
+          reservationId: reservation.id,
+          guestId: reservation.guestId,
+          nightlyRateSnapshot: quote.nightlyBreakdown as object,
+          cleaningFeeSnapshot: quote.cleaningFee,
+          taxesSnapshot: quote.taxAmount,
+          serviceFeeSnapshot: quote.serviceFee,
+          depositHoldSnapshot: quote.depositHold,
+          addOnsSnapshot: quote.addOnsBreakdown as object ?? undefined,
+          totalPriceSnapshot: quote.total,
+          termsAccepted: agreedToRules ?? true,
+          cancellationPolicy:
+            bookingRule?.cancellationPolicy ?? "flexible",
+          paymentStatus: "none",
+        },
+      });
+    } catch (snapErr) {
+      console.error("Agreement snapshot creation failed (non-blocking):", snapErr);
+    }
 
     await prisma.bookingNotification.create({
       data: {

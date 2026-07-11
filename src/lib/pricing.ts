@@ -20,8 +20,10 @@ export interface PriceBreakdown {
   serviceFee: number;
   depositHoldLabel: string;
   depositHold: number;
-  addOns: { name: string; price: number }[];
+  addOns: { name: string; price: number; pricingType: string }[];
   addOnsTotal: number;
+  promoDiscount: number;
+  promoCode: string | null;
   total: number;
 }
 
@@ -30,7 +32,11 @@ export async function calculatePricing(
   checkIn: Date,
   checkOut: Date,
   guests: number,
-  options?: { hasPets?: boolean; selectedAddOns?: string[] }
+  options?: {
+    hasPets?: boolean;
+    selectedAddOns?: string[];
+    promoCode?: string;
+  }
 ): Promise<PriceBreakdown> {
   const listing = await prisma.listing.findUnique({
     where: { id: listingId },
@@ -45,7 +51,6 @@ export async function calculatePricing(
 
   if (nights <= 0) throw new Error("Check-out must be after check-in");
 
-  // Build array of stay dates
   const dates: Date[] = [];
   for (let i = 0; i < nights; i++) {
     const d = new Date(checkIn);
@@ -53,18 +58,15 @@ export async function calculatePricing(
     dates.push(d);
   }
 
-  // Fetch manual daily rate overrides (highest priority)
+  // FinalDailyRate overrides (highest priority)
   const dailyRates = await prisma.finalDailyRate.findMany({
-    where: {
-      listingId,
-      date: { in: dates },
-    },
+    where: { listingId, date: { in: dates } },
   });
   const rateMap = new Map(
     dailyRates.map((r) => [r.date.toISOString().split("T")[0], r])
   );
 
-  // Fetch SalesConfig (new primary source)
+  // SalesConfig (primary source)
   const salesConfig = await prisma.salesConfig.findUnique({
     where: { listingId },
     include: { addOns: { where: { isActive: true } } },
@@ -73,7 +75,7 @@ export async function calculatePricing(
   const useSalesConfig = salesConfig && salesConfig.isActive;
   const config = listing.pricingConfig;
 
-  // Determine base rate: SalesConfig > PricingConfig > Listing
+  // Base rate: SalesConfig > PricingConfig > Listing
   const baseRate = useSalesConfig
     ? salesConfig.boardRate
     : config?.baseNightlyRate || listing.pricePerNight;
@@ -82,7 +84,7 @@ export async function calculatePricing(
     ? salesConfig.weekendRate
     : config?.weekendRate ?? null;
 
-  // Build nightly rates: FinalDailyRate overrides first, then weekend/base
+  // Build nightly rates: FinalDailyRate > weekend/base
   const nightlyRates: NightlyRate[] = dates.map((d) => {
     const key = d.toISOString().split("T")[0];
     const daily = rateMap.get(key);
@@ -104,8 +106,10 @@ export async function calculatePricing(
 
   // Extra guest fee
   const extraGuestThreshold = useSalesConfig
-    ? salesConfig.extraGuestThreshold
-    : listing.maxGuests > 2 ? 2 : listing.maxGuests;
+    ? salesConfig.guestsIncluded
+    : listing.maxGuests > 2
+      ? 2
+      : listing.maxGuests;
   const extraGuestRate = useSalesConfig
     ? salesConfig.extraGuestFee
     : config?.extraGuestFee ?? 0;
@@ -118,15 +122,17 @@ export async function calculatePricing(
     : config?.petFee ?? 0;
   const petFee = options?.hasPets ? petFeeAmount : 0;
 
-  // Tax (only from SalesConfig)
+  // Tax
   const taxRate = useSalesConfig ? salesConfig.taxRate : 0;
   const taxLabel = useSalesConfig ? salesConfig.taxLabel : "Taxes & Fees";
   const taxableAmount = subtotal + cleaningFee + petFee + extraGuestFee;
   const taxAmount = taxableAmount * (taxRate / 100);
 
-  // Service fee (only from SalesConfig)
+  // Service fee
   let serviceFee = 0;
-  const serviceFeeLabel = useSalesConfig ? salesConfig.serviceFeeLabel : "Service Fee";
+  const serviceFeeLabel = useSalesConfig
+    ? salesConfig.serviceFeeLabel
+    : "Service Fee";
   if (useSalesConfig) {
     if (salesConfig.serviceFeePercent > 0) {
       serviceFee = subtotal * (salesConfig.serviceFeePercent / 100);
@@ -136,25 +142,79 @@ export async function calculatePricing(
   }
 
   // Add-ons
-  const matchedAddOns: { name: string; price: number }[] = [];
-  if (useSalesConfig && options?.selectedAddOns && salesConfig.addOns.length > 0) {
+  const matchedAddOns: { name: string; price: number; pricingType: string }[] = [];
+  if (
+    useSalesConfig &&
+    options?.selectedAddOns &&
+    salesConfig.addOns.length > 0
+  ) {
     for (const addOnName of options.selectedAddOns) {
       const found = salesConfig.addOns.find(
         (a) => a.name.toLowerCase() === addOnName.toLowerCase()
       );
       if (found) {
-        matchedAddOns.push({ name: found.name, price: found.price });
+        let addOnPrice = found.price;
+        if (found.pricingType === "per_night") {
+          addOnPrice = found.price * nights;
+        } else if (found.pricingType === "per_guest") {
+          addOnPrice = found.price * guests;
+        } else if (found.pricingType === "percentage") {
+          addOnPrice = subtotal * (found.price / 100);
+        }
+        matchedAddOns.push({
+          name: found.name,
+          price: addOnPrice,
+          pricingType: found.pricingType,
+        });
       }
     }
   }
   const addOnsTotal = matchedAddOns.reduce((sum, a) => sum + a.price, 0);
 
-  // Total before deposit
-  const totalBeforeDeposit = subtotal + cleaningFee + petFee + extraGuestFee + taxAmount + serviceFee + addOnsTotal;
+  // Promo code discount
+  let promoDiscount = 0;
+  let appliedPromoCode: string | null = null;
 
-  // Deposit hold (only from SalesConfig)
+  if (options?.promoCode) {
+    const promo = await prisma.promoCode.findUnique({
+      where: { code: options.promoCode.toUpperCase() },
+    });
+    if (promo && promo.isActive) {
+      const now = new Date();
+      const validDate =
+        (!promo.startDate || promo.startDate <= now) &&
+        (!promo.endDate || promo.endDate >= now);
+      const validUses = promo.maxUses === 0 || promo.currentUses < promo.maxUses;
+      const validNights = nights >= promo.minimumNights;
+      const validListing = !promo.listingId || promo.listingId === listingId;
+
+      if (validDate && validUses && validNights && validListing) {
+        if (promo.discountType === "percentage") {
+          promoDiscount = subtotal * (promo.discountValue / 100);
+        } else {
+          promoDiscount = promo.discountValue;
+        }
+        appliedPromoCode = promo.code;
+      }
+    }
+  }
+
+  // Total before deposit
+  const totalBeforeDeposit =
+    subtotal +
+    cleaningFee +
+    petFee +
+    extraGuestFee +
+    taxAmount +
+    serviceFee +
+    addOnsTotal -
+    promoDiscount;
+
+  // Deposit hold
   let depositHold = 0;
-  const depositHoldLabel = useSalesConfig ? salesConfig.depositHoldLabel : "Security Deposit Hold";
+  const depositHoldLabel = useSalesConfig
+    ? salesConfig.depositHoldLabel
+    : "Security Deposit Hold";
   if (useSalesConfig) {
     if (salesConfig.depositHoldPercent > 0) {
       depositHold = totalBeforeDeposit * (salesConfig.depositHoldPercent / 100);
@@ -181,6 +241,8 @@ export async function calculatePricing(
     depositHold,
     addOns: matchedAddOns,
     addOnsTotal,
+    promoDiscount,
+    promoCode: appliedPromoCode,
     total,
   };
 }

@@ -44,6 +44,10 @@ model Listing {
   bookingQuotes BookingQuote[]
   bookingRule   BookingRule?
   salesConfig   SalesConfig?
+  dynamicPricingSettings DynamicPricingSettings?
+  promoCodes    PromoCode[]
+  abandonedCheckouts AbandonedCheckout[]
+  salesActivityLogs  SalesActivityLog[]
 }
 
 model Media {
@@ -123,6 +127,7 @@ model Reservation {
 
   quoteId          String?
   guestId          String?
+  guest            Guest?   @relation(fields: [guestId], references: [id], onDelete: SetNull)
   bookingMode      String?
   nightlyBreakdown Json?
   subtotal         Float?
@@ -144,6 +149,8 @@ model Reservation {
   declinedReason   String?
 
   agreement     ReservationAgreement?
+  agreementSnapshot BookingAgreementSnapshot?
+  changeOrders  ReservationChangeOrder[]
   guestRequests GuestRequest[]
   guestReviews  GuestReview[]
   portalLogs    GuestPortalLog[]
@@ -867,6 +874,7 @@ model BookingQuote {
   createdAt        DateTime @default(now())
 
   checkoutSession  CheckoutSession?
+  quoteAddOns      BookingQuoteAddon[]
 
   @@index([listingId])
   @@index([status, expiresAt])
@@ -954,6 +962,13 @@ model SalesConfig {
   extraGuestFee     Float    @default(0)
   extraGuestThreshold Int    @default(2)
 
+  guestsIncluded    Int      @default(2)
+  maxGuests         Int      @default(10)
+  minimumStay       Int      @default(1)
+  maximumStay        Int      @default(30)
+  sameDayBookingAllowed Boolean @default(false)
+  advanceNoticeHours Int     @default(24)
+
   isActive          Boolean  @default(true)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -969,12 +984,161 @@ model AddOnItem {
   description     String?
   price           Float
   category        String      @default("service")
+  pricingType     String      @default("flat")
+  guestVisible    Boolean     @default(true)
+  requiresAdminApproval Boolean @default(false)
+  requiresInventory Boolean   @default(false)
+  taxable         Boolean     @default(true)
   isActive        Boolean     @default(true)
   sortOrder       Int         @default(0)
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
+  quoteAddOns     BookingQuoteAddon[]
+
   @@index([salesConfigId])
+}
+
+model BookingQuoteAddon {
+  id            String    @id @default(cuid())
+  quoteId       String
+  quote         BookingQuote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  addOnItemId   String
+  addOnItem     AddOnItem @relation(fields: [addOnItemId], references: [id], onDelete: Cascade)
+  quantity      Int       @default(1)
+  priceSnapshot Float
+  totalPrice    Float
+  createdAt     DateTime  @default(now())
+
+  @@index([quoteId])
+  @@index([addOnItemId])
+}
+
+// ─── Dynamic Pricing ─────────────────────────────────────────────────
+
+model DynamicPricingSettings {
+  id                        String   @id @default(cuid())
+  listingId                 String   @unique
+  listing                   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  enabled                   Boolean  @default(false)
+  pricingMode               String   @default("balanced")
+  minimumRate               Float    @default(0)
+  maximumRate               Float    @default(0)
+  weekendPremiumPercent     Float    @default(0)
+  eventPremiumPercent       Float    @default(0)
+  gapNightDiscountPercent   Float    @default(0)
+  lastMinuteDiscountPercent Float    @default(0)
+  farOutPremiumPercent      Float    @default(0)
+  occupancyBasedEnabled     Boolean  @default(false)
+  bookingPaceEnabled        Boolean  @default(false)
+  marketCompEnabled         Boolean  @default(false)
+  manualPriceLockEnabled    Boolean  @default(false)
+  pricingProvider           String?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+}
+
+// ─── Booking Agreement Snapshot ──────────────────────────────────────
+
+model BookingAgreementSnapshot {
+  id                   String      @id @default(cuid())
+  reservationId        String      @unique
+  reservation          Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  guestId              String?
+  nightlyRateSnapshot  Json
+  cleaningFeeSnapshot  Float       @default(0)
+  taxesSnapshot        Float       @default(0)
+  serviceFeeSnapshot   Float       @default(0)
+  depositHoldSnapshot  Float       @default(0)
+  addOnsSnapshot       Json?
+  discountsSnapshot    Json?
+  totalPriceSnapshot   Float       @default(0)
+  termsAccepted        Boolean     @default(true)
+  cancellationPolicy   String      @default("flexible")
+  paymentStatus        String      @default("none")
+  createdAt            DateTime    @default(now())
+}
+
+// ─── Reservation Change Orders ───────────────────────────────────────
+
+model ReservationChangeOrder {
+  id                    String      @id @default(cuid())
+  reservationId         String
+  reservation           Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  guestId               String?
+  changeType            String
+  description           String?
+  originalValue         String?
+  newValue              String?
+  originalPrice         Float       @default(0)
+  newPrice              Float       @default(0)
+  priceDifference       Float       @default(0)
+  adminApprovalRequired Boolean     @default(false)
+  guestApprovalRequired Boolean     @default(false)
+  approvalStatus        String      @default("pending")
+  paymentStatus         String      @default("none")
+  invoiceUrl            String?
+  notes                 String?
+  processedBy           String?
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+
+  @@index([reservationId])
+}
+
+// ─── Promo Codes ─────────────────────────────────────────────────────
+
+model PromoCode {
+  id             String    @id @default(cuid())
+  code           String    @unique
+  discountType   String    @default("percentage")
+  discountValue  Float     @default(0)
+  listingId      String?
+  listing        Listing?  @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  startDate      DateTime?
+  endDate        DateTime?
+  minimumNights  Int       @default(1)
+  maxUses        Int       @default(0)
+  currentUses    Int       @default(0)
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+// ─── Abandoned Checkouts ─────────────────────────────────────────────
+
+model AbandonedCheckout {
+  id              String    @id @default(cuid())
+  quoteId         String?
+  guestEmail      String?
+  guestPhone      String?
+  listingId       String?
+  listing         Listing?  @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  checkIn         DateTime?
+  checkOut        DateTime?
+  totalQuote      Float     @default(0)
+  abandonedStep   String?
+  abandonedAt     DateTime  @default(now())
+  followUpStatus  String    @default("none")
+  createdAt       DateTime  @default(now())
+
+  @@index([listingId])
+}
+
+// ─── Sales Activity Log ──────────────────────────────────────────────
+
+model SalesActivityLog {
+  id           String   @id @default(cuid())
+  listingId    String?
+  listing      Listing? @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  activityType String
+  description  String?
+  oldValue     String?
+  newValue     String?
+  changedBy    String?
+  createdAt    DateTime @default(now())
+
+  @@index([listingId])
 }
 
 // ─── Guest CRM System ─────────────────────────────────────────────────
@@ -1001,6 +1165,7 @@ model Guest {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  reservations    Reservation[]
   accommodation   GuestAccommodation?
   tags            GuestTagAssignment[]
   notes           GuestNote[]

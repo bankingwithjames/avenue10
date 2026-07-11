@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { listingId, addOns, ...configData } = body;
+    const { listingId, addOns, extraGuestThreshold, ...configData } = body;
 
     if (!listingId) {
       return NextResponse.json({ error: "listingId required" }, { status: 400 });
@@ -47,8 +47,8 @@ export async function POST(req: NextRequest) {
 
     const config = await prisma.salesConfig.upsert({
       where: { listingId },
-      update: configData,
-      create: { listingId, ...configData },
+      update: { ...configData, extraGuestThreshold: extraGuestThreshold ?? 2 },
+      create: { listingId, ...configData, extraGuestThreshold: extraGuestThreshold ?? 2 },
     });
 
     if (Array.isArray(addOns)) {
@@ -59,13 +59,29 @@ export async function POST(req: NextRequest) {
       if (addOns.length > 0) {
         await prisma.addOnItem.createMany({
           data: addOns.map(
-            (item: { name: string; price: number; category?: string; description?: string; isActive?: boolean }, index: number) => ({
+            (item: {
+              name: string;
+              price: number;
+              category?: string;
+              description?: string;
+              pricingType?: string;
+              guestVisible?: boolean;
+              requiresAdminApproval?: boolean;
+              requiresInventory?: boolean;
+              taxable?: boolean;
+              isActive?: boolean;
+            }, index: number) => ({
               salesConfigId: config.id,
               name: item.name,
               price: item.price,
               category: item.category || "service",
               description: item.description || null,
-              isActive: item.isActive !== undefined ? item.isActive : true,
+              pricingType: item.pricingType || "flat",
+              guestVisible: item.guestVisible !== false,
+              requiresAdminApproval: item.requiresAdminApproval === true,
+              requiresInventory: item.requiresInventory === true,
+              taxable: item.taxable !== false,
+              isActive: item.isActive !== false,
               sortOrder: index,
             })
           ),

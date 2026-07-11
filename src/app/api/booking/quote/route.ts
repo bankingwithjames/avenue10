@@ -120,10 +120,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ quote }, { status: 201 });
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    console.error("Quote creation error:", msg, error);
+    console.error("Quote creation error:", error);
     return NextResponse.json(
-      { error: "Failed to create quote", detail: msg },
+      { error: "Failed to create quote" },
       { status: 500 }
     );
   }

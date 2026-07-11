@@ -6,6 +6,8 @@ const DEFAULT_RULE = {
   cancellationPolicy: "flexible",
   depositPercent: 0,
   depositFlat: 0,
+  depositHoldPercent: 0,
+  depositHoldFlat: 0,
   requireAgreement: true,
   requireIdVerification: false,
   minAdvanceDays: 1,
@@ -26,9 +28,10 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const rule = await prisma.bookingRule.findUnique({
-      where: { listingId },
-    });
+    const [rule, salesConfig] = await Promise.all([
+      prisma.bookingRule.findUnique({ where: { listingId } }),
+      prisma.salesConfig.findUnique({ where: { listingId } }),
+    ]);
 
     return NextResponse.json({
       rule: rule
@@ -37,6 +40,8 @@ export async function GET(req: NextRequest) {
             cancellationPolicy: rule.cancellationPolicy,
             depositPercent: rule.depositPercent,
             depositFlat: rule.depositFlat,
+            depositHoldPercent: salesConfig?.depositHoldPercent ?? 0,
+            depositHoldFlat: salesConfig?.depositHoldFlat ?? 0,
             requireAgreement: rule.requireAgreement,
             requireIdVerification: rule.requireIdVerification,
             minAdvanceDays: rule.minAdvanceDays,
@@ -45,7 +50,11 @@ export async function GET(req: NextRequest) {
             autoApproveReturning: rule.autoApproveReturning,
             isActive: rule.isActive,
           }
-        : DEFAULT_RULE,
+        : {
+            ...DEFAULT_RULE,
+            depositHoldPercent: salesConfig?.depositHoldPercent ?? 0,
+            depositHoldFlat: salesConfig?.depositHoldFlat ?? 0,
+          },
     });
   } catch (error) {
     console.error("Booking rules error:", error);

@@ -23,6 +23,7 @@ import {
   Settings,
   ChevronDown,
   ChevronRight,
+  DollarSign,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -37,6 +38,7 @@ const navSections: NavSection[] = [
     items: [
       { href: "/admin/listings", label: "Listings", icon: Home },
       { href: "/admin/reservations", label: "Reservations", icon: ClipboardList },
+      { href: "/admin/sales", label: "Sales Management", icon: DollarSign },
       { href: "/admin/availability", label: "Calendar", icon: Calendar },
       { href: "/admin/guests", label: "Guests", icon: Users },
       { href: "/admin/tasks", label: "Tasks & Cleaning", icon: Sparkles },

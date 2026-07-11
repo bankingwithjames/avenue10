@@ -24,6 +24,10 @@ interface Quote {
   petFee: number;
   extraGuestFee: number;
   taxAmount: number;
+  serviceFee: number;
+  depositHold: number;
+  addOnsTotal: number;
+  addOnsBreakdown: { name: string; price: number }[] | null;
   total: number;
   expiresAt: string;
   listing: {
@@ -756,7 +760,7 @@ export function CheckoutForm({ quoteId }: { quoteId: string }) {
               <div className="border-t border-light-gray pt-3 space-y-2">
                 <div className="flex justify-between text-charcoal/60">
                   <span>
-                    {quote.nights} night{quote.nights > 1 ? "s" : ""}
+                    Board rate &times; {quote.nights} night{quote.nights > 1 ? "s" : ""}
                   </span>
                   <span>${quote.subtotal.toFixed(2)}</span>
                 </div>
@@ -780,14 +784,36 @@ export function CheckoutForm({ quoteId }: { quoteId: string }) {
                 )}
                 {quote.taxAmount > 0 && (
                   <div className="flex justify-between text-charcoal/60">
-                    <span>Taxes</span>
+                    <span>Taxes &amp; fees</span>
                     <span>${quote.taxAmount.toFixed(2)}</span>
+                  </div>
+                )}
+                {quote.serviceFee > 0 && (
+                  <div className="flex justify-between text-charcoal/60">
+                    <span>Service fee</span>
+                    <span>${quote.serviceFee.toFixed(2)}</span>
+                  </div>
+                )}
+                {quote.addOnsBreakdown && quote.addOnsBreakdown.length > 0 && (
+                  <>
+                    {quote.addOnsBreakdown.map((addon, i) => (
+                      <div key={i} className="flex justify-between text-charcoal/60">
+                        <span>{addon.name}</span>
+                        <span>${addon.price.toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </>
+                )}
+                {quote.depositHold > 0 && (
+                  <div className="flex justify-between text-charcoal/60">
+                    <span>Deposit hold <span className="text-[9px]">(refundable)</span></span>
+                    <span>${quote.depositHold.toFixed(2)}</span>
                   </div>
                 )}
               </div>
 
               <div className="flex justify-between font-medium text-charcoal border-t border-light-gray pt-3">
-                <span>Total</span>
+                <span>Final charge</span>
                 <span>${quote.total.toFixed(2)}</span>
               </div>
             </div>

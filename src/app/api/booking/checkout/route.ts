@@ -13,7 +13,22 @@ function generateConfirmationCode(): string {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { quoteId, firstName, lastName, email, phone, specialRequests } = body;
+    const {
+      quoteId,
+      firstName,
+      lastName,
+      email,
+      phone,
+      specialRequests,
+      address,
+      agreedToRules,
+      depositAmount,
+      earlyCheckin,
+      lateCheckout,
+      needsCrib,
+      needsHighChair,
+      paymentMethod,
+    } = body;
 
     if (!quoteId || !firstName || !lastName || !email) {
       return NextResponse.json(
@@ -82,10 +97,56 @@ export async function POST(req: NextRequest) {
     });
 
     const bookingMode = bookingRule?.bookingMode ?? "request_to_book";
-    const status = bookingMode === "instant_book" ? "confirmed" : "pending";
+
+    // Build notes with address and special requests
+    const notesParts: string[] = [];
+
+    if (address) {
+      notesParts.push(
+        `Address: ${JSON.stringify(address)}`
+      );
+    }
+
+    if (specialRequests) {
+      notesParts.push(`Special Requests: ${specialRequests}`);
+    }
+
+    const specialRequestItems: string[] = [];
+    if (earlyCheckin) specialRequestItems.push("Early check-in requested");
+    if (lateCheckout) specialRequestItems.push("Late check-out requested");
+    if (needsCrib) specialRequestItems.push("Pack-n-play / Crib needed");
+    if (needsHighChair) specialRequestItems.push("High chair needed");
+    if (specialRequestItems.length > 0) {
+      notesParts.push(`Additional Requests: ${specialRequestItems.join(", ")}`);
+    }
+
+    if (paymentMethod) {
+      notesParts.push(`Payment Method: ${paymentMethod}`);
+    }
+
+    if (agreedToRules) {
+      notesParts.push("Guest agreed to House Rules and Rental Agreement");
+    }
+
+    const notes = notesParts.length > 0 ? notesParts.join("\n") : null;
+
+    // Calculate deposit
+    let calculatedDeposit = 0;
+    if (depositAmount && depositAmount > 0) {
+      calculatedDeposit = depositAmount;
+    } else if (bookingRule) {
+      if (bookingRule.depositPercent > 0) {
+        calculatedDeposit =
+          Math.round(quote.total * (bookingRule.depositPercent / 100) * 100) /
+          100;
+      } else if (bookingRule.depositFlat > 0) {
+        calculatedDeposit = bookingRule.depositFlat;
+      }
+    }
 
     const guestName = `${firstName} ${lastName}`;
 
+    // All bookings start as pending — admin confirms via the admin API
     const reservation = await prisma.reservation.create({
       data: {
         listingId: quote.listingId,
@@ -96,8 +157,8 @@ export async function POST(req: NextRequest) {
         guestName,
         guestEmail: email,
         guestPhone: phone || null,
-        notes: specialRequests || null,
-        status,
+        notes,
+        status: "pending",
         accessCode: generateAccessCode(),
         confirmationCode: generateConfirmationCode(),
         quoteId: quoteId,
@@ -110,6 +171,7 @@ export async function POST(req: NextRequest) {
         taxAmount: quote.taxAmount,
         paymentStatus: "none",
         channel: "website",
+        depositAmount: calculatedDeposit > 0 ? calculatedDeposit : null,
       },
     });
 
@@ -118,6 +180,7 @@ export async function POST(req: NextRequest) {
       data: { status: "converted" },
     });
 
+    // Create or find guest profile (non-blocking)
     try {
       let guest = await prisma.guest.findUnique({ where: { email } });
       if (!guest) {
@@ -139,38 +202,16 @@ export async function POST(req: NextRequest) {
       console.error("Guest profile creation failed (non-blocking):", guestErr);
     }
 
-    if (status === "confirmed") {
-      const dates: Date[] = [];
-      const current = new Date(quote.checkIn);
-      while (current < quote.checkOut) {
-        dates.push(new Date(current));
-        current.setDate(current.getDate() + 1);
-      }
-      for (const date of dates) {
-        await prisma.closedDate.upsert({
-          where: {
-            listingId_date: { listingId: quote.listingId, date },
-          },
-          create: {
-            listingId: quote.listingId,
-            date,
-            reason: `Booking ${reservation.confirmationCode}`,
-          },
-          update: {},
-        });
-      }
-    }
+    // Date blocking is handled exclusively by admin confirmation
+    // via src/app/api/admin/reservations/[id]/route.ts
 
     await prisma.bookingNotification.create({
       data: {
         reservationId: reservation.id,
-        type: status === "confirmed" ? "confirmation" : "request_received",
+        type: "request_received",
         channel: "email",
         recipient: email,
-        subject:
-          status === "confirmed"
-            ? `Booking Confirmed - ${reservation.confirmationCode}`
-            : `Booking Request Received - ${reservation.confirmationCode}`,
+        subject: `Booking Request Received - ${reservation.confirmationCode}`,
         status: "pending",
       },
     });

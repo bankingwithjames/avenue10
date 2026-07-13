@@ -145,38 +145,67 @@ export function calculateNightlyRate(ctx: NightlyRateContext): NightlyBreakdown 
 
   // Rule 8: Occupancy-based adjustment
   if (ds.occupancyBasedEnabled && ctx.occupancyPercent > 0) {
-    // Scale: 0-50% occupancy = no effect, 50-80% = up to +10%, 80-100% = up to +25%
-    let occMultiplier = 1;
-    if (ctx.occupancyPercent >= 80) {
-      occMultiplier = 1 + (0.25 * mm * (ctx.occupancyPercent - 80)) / 20;
-    } else if (ctx.occupancyPercent >= 50) {
-      occMultiplier = 1 + (0.10 * mm * (ctx.occupancyPercent - 50)) / 30;
-    }
-    if (occMultiplier > 1) {
-      rate = applyRule(rate, "occupancy", `Occupancy adjustment (${ctx.occupancyPercent}% booked)`, occMultiplier, adjustments);
+    const occRule = ctx.occupancyRuleSettings;
+    const weekend = isWeekend(ctx.date);
+    const skipForDayType = occRule && ((!occRule.applyWeekdays && !weekend) || (!occRule.applyWeekends && weekend));
+
+    if (!skipForDayType) {
+      const lowThreshold = occRule?.lowOccupancyThreshold ?? 40;
+      const highThreshold = occRule?.highOccupancyThreshold ?? 75;
+      const lowAdjPct = occRule?.lowOccupancyAdjustmentPercent ?? 10;
+      const highAdjPct = occRule?.highOccupancyAdjustmentPercent ?? 15;
+      const maxInc = occRule?.maxIncreasePercent ?? 25;
+      const maxDec = occRule?.maxDecreasePercent ?? 15;
+
+      let occMultiplier = 1;
+      if (ctx.occupancyPercent >= highThreshold) {
+        const scale = Math.min((ctx.occupancyPercent - highThreshold) / (100 - highThreshold), 1);
+        occMultiplier = 1 + (highAdjPct / 100) * scale * mm;
+        occMultiplier = Math.min(occMultiplier, 1 + maxInc / 100);
+      } else if (ctx.occupancyPercent <= lowThreshold) {
+        const scale = Math.min((lowThreshold - ctx.occupancyPercent) / lowThreshold, 1);
+        occMultiplier = 1 - (lowAdjPct / 100) * scale * mm;
+        occMultiplier = Math.max(occMultiplier, 1 - maxDec / 100);
+      }
+
+      if (occMultiplier !== 1) {
+        rate = applyRule(rate, "occupancy", `Occupancy adjustment (${ctx.occupancyPercent}% booked)`, occMultiplier, adjustments);
+      }
     }
   }
 
   // Rule 9: Booking pace adjustment
   if (ds.bookingPaceEnabled && ctx.bookingPacePercent > 0) {
-    // Faster-than-expected pace = higher rates
-    // bookingPacePercent: 100 = normal, >100 = faster, <100 = slower
-    if (ctx.bookingPacePercent > 110) {
-      const paceBoost = Math.min(((ctx.bookingPacePercent - 100) / 100) * mm, 0.3);
+    const paceRule = ctx.bookingPaceRuleSettings;
+    const fastThreshold = paceRule?.fastPaceThresholdPercent ?? 120;
+    const slowThreshold = paceRule?.slowPaceThresholdPercent ?? 80;
+    const fastAdjPct = paceRule?.fastPaceAdjustmentPercent ?? 10;
+    const slowAdjPct = paceRule?.slowPaceAdjustmentPercent ?? 10;
+    const maxAdj = paceRule?.maxAdjustmentPercent ?? 20;
+
+    if (ctx.bookingPacePercent >= fastThreshold) {
+      const paceBoost = Math.min((fastAdjPct / 100) * mm, maxAdj / 100);
       rate = applyRule(rate, "booking_pace", `Booking pace premium (${ctx.bookingPacePercent}% of expected)`, 1 + paceBoost, adjustments);
-    } else if (ctx.bookingPacePercent < 90) {
-      const paceDiscount = Math.min(((100 - ctx.bookingPacePercent) / 100) * mm, 0.15);
+    } else if (ctx.bookingPacePercent <= slowThreshold) {
+      const paceDiscount = Math.min((slowAdjPct / 100) * mm, maxAdj / 100);
       rate = applyRule(rate, "booking_pace", `Booking pace discount (${ctx.bookingPacePercent}% of expected)`, 1 - paceDiscount, adjustments);
     }
   }
 
   // Rule 10: Market comp adjustment
   if (ds.marketCompEnabled && ctx.marketCompRate !== null && ctx.marketCompRate > 0) {
+    const compRule = ctx.marketCompRuleSettings;
+    const maxInc = compRule?.maxIncreasePercent ?? 20;
+    const maxDec = compRule?.maxDecreasePercent ?? 15;
+    const strengthMap: Record<string, number> = { conservative: 0.25, balanced: 0.5, aggressive: 0.75 };
+    const blendFactor = (strengthMap[compRule?.adjustmentStrength ?? "balanced"] ?? 0.5) * mm;
+
     const compRatio = ctx.marketCompRate / rate;
     if (compRatio > 1.05 || compRatio < 0.95) {
-      const blendFactor = 0.3 * mm;
       const blendedRate = rate + (ctx.marketCompRate - rate) * blendFactor;
-      const multiplier = blendedRate / rate;
+      let multiplier = blendedRate / rate;
+      multiplier = Math.min(multiplier, 1 + maxInc / 100);
+      multiplier = Math.max(multiplier, 1 - maxDec / 100);
       rate = applyRule(rate, "market_comp", `Market comp adjustment (comp: $${ctx.marketCompRate.toFixed(0)})`, multiplier, adjustments);
     }
   }

@@ -228,30 +228,24 @@ function AdminAvailabilityPageInner() {
 
   function getDateStatus(day: number): DateStatus {
     const dateStr = formatDateStr(day);
-    const date = new Date(dateStr + "T12:00:00");
-
-    const cd = closedMap.get(dateStr);
-    if (cd) {
-      return { type: "blocked", reason: cd.reason, id: cd.id };
-    }
 
     const res = activeReservations.find((r) => {
-      const ci = new Date(r.checkIn);
-      const co = new Date(r.checkOut);
-      ci.setHours(0, 0, 0, 0);
-      co.setHours(0, 0, 0, 0);
-      date.setHours(0, 0, 0, 0);
-      return date >= ci && date < co;
+      const ciStr = new Date(r.checkIn).toISOString().split("T")[0];
+      const coStr = new Date(r.checkOut).toISOString().split("T")[0];
+      return dateStr >= ciStr && dateStr < coStr;
     });
 
     if (res) {
       return { type: "booked", reservation: res };
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    date.setHours(0, 0, 0, 0);
-    if (date < today) {
+    const cd = closedMap.get(dateStr);
+    if (cd) {
+      return { type: "blocked", reason: cd.reason, id: cd.id };
+    }
+
+    const todayStr = new Date().toISOString().split("T")[0];
+    if (dateStr < todayStr) {
       return { type: "past" };
     }
 

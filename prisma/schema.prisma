@@ -49,6 +49,11 @@ model Listing {
   promoCodes    PromoCode[]
   abandonedCheckouts AbandonedCheckout[]
   salesActivityLogs  SalesActivityLog[]
+  occupancyPricingSettings OccupancyPricingSettings?
+  bookingPaceSettings      BookingPaceSettings?
+  marketCompSettings       MarketCompSettings?
+  manualPriceLocks         ManualPriceLock[]
+  pricingRulePreviews      PricingRulePreview[]
 }
 
 model Media {
@@ -733,17 +738,22 @@ model FinalDailyRate {
 }
 
 model PricingRule {
-  id              String   @id @default(cuid())
-  listingId       String
-  listing         Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  ruleType        String
-  ruleName        String
-  adjustmentType  String   @default("percentage")
-  adjustmentValue Float    @default(0)
-  appliesTo       String   @default("all")
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                    String   @id @default(cuid())
+  listingId             String
+  listing               Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  ruleType              String
+  ruleName              String
+  ruleStatus            String   @default("draft")
+  adjustmentType        String   @default("percentage")
+  adjustmentValue       Float    @default(0)
+  appliesTo             String   @default("all")
+  settingsJson          Json?
+  minRate               Float    @default(0)
+  maxRate               Float    @default(0)
+  requiresAdminApproval Boolean  @default(false)
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   @@index([listingId])
 }
@@ -752,15 +762,133 @@ model PricingChangeLog {
   id                  String   @id @default(cuid())
   listingId           String
   listing             Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  date                DateTime?
   changedField        String
+  oldRate             Float?
+  newRate             Float?
   oldValue            String?
   newValue            String?
+  changedByRule       String?
+  changedByAdmin      String?
   changedFromPage     String   @default("listings")
   changedBy           String?
+  reason              String?
   affectsFinalPricing Boolean  @default(true)
   createdAt           DateTime @default(now())
 
   @@index([listingId])
+}
+
+// ─── Occupancy-Based Pricing ────────────────────────────────────────
+
+model OccupancyPricingSettings {
+  id                            String   @id @default(cuid())
+  listingId                     String   @unique
+  listing                       Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  isEnabled                     Boolean  @default(false)
+  occupancyWindowDays           Int      @default(30)
+  lowOccupancyThreshold         Float    @default(40)
+  highOccupancyThreshold        Float    @default(75)
+  lowOccupancyAdjustmentPercent Float    @default(10)
+  highOccupancyAdjustmentPercent Float   @default(15)
+  maxIncreasePercent            Float    @default(25)
+  maxDecreasePercent            Float    @default(15)
+  applyWeekdays                 Boolean  @default(true)
+  applyWeekends                 Boolean  @default(true)
+  excludeLockedDates            Boolean  @default(true)
+  excludeEventDates             Boolean  @default(true)
+  requireAdminApproval          Boolean  @default(false)
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+}
+
+// ─── Booking Pace Adjustment ────────────────────────────────────────
+
+model BookingPaceSettings {
+  id                          String   @id @default(cuid())
+  listingId                   String   @unique
+  listing                     Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  isEnabled                   Boolean  @default(false)
+  comparisonPeriodDays        Int      @default(90)
+  fastPaceThresholdPercent    Float    @default(120)
+  slowPaceThresholdPercent    Float    @default(80)
+  fastPaceAdjustmentPercent   Float    @default(10)
+  slowPaceAdjustmentPercent   Float    @default(10)
+  leadTimeWindowsJson         Json     @default("[{\"min\":0,\"max\":7,\"label\":\"0-7 days\"},{\"min\":8,\"max\":30,\"label\":\"8-30 days\"},{\"min\":31,\"max\":90,\"label\":\"31-90 days\"},{\"min\":91,\"max\":365,\"label\":\"90+ days\"}]")
+  maxAdjustmentPercent        Float    @default(20)
+  applyFutureOpenDatesOnly    Boolean  @default(true)
+  excludeLockedDates          Boolean  @default(true)
+  requireAdminApproval        Boolean  @default(false)
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+}
+
+// ─── Market Comp Adjustment ─────────────────────────────────────────
+
+model MarketCompSettings {
+  id                          String   @id @default(cuid())
+  listingId                   String   @unique
+  listing                     Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  isEnabled                   Boolean  @default(false)
+  marketDataSource            String   @default("manual")
+  compRadiusMiles             Float    @default(5)
+  compPropertyType            String   @default("entire_home")
+  bedroomMatchRequired        Boolean  @default(true)
+  guestCapacityMatchRequired  Boolean  @default(false)
+  targetMarketPosition        String   @default("premium")
+  adjustmentStrength          String   @default("balanced")
+  minimumConfidenceScore      Float    @default(60)
+  maxIncreasePercent          Float    @default(20)
+  maxDecreasePercent          Float    @default(15)
+  excludeWeakCompData         Boolean  @default(true)
+  excludeLockedDates          Boolean  @default(true)
+  requireAdminApproval        Boolean  @default(false)
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+}
+
+// ─── Manual Price Locks ─────────────────────────────────────────────
+
+model ManualPriceLock {
+  id                   String    @id @default(cuid())
+  listingId            String
+  listing              Listing   @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  startDate            DateTime
+  endDate              DateTime
+  lockedRate           Float
+  lockReason           String?
+  lockAppliesTo        String    @default("rate_only")
+  expiresAt            DateTime?
+  preventAiChanges     Boolean   @default(true)
+  preventBulkUpdates   Boolean   @default(true)
+  preventDynamicRules  Boolean   @default(true)
+  createdBy            String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([listingId])
+  @@index([listingId, startDate, endDate])
+}
+
+// ─── Pricing Rule Previews ──────────────────────────────────────────
+
+model PricingRulePreview {
+  id                      String   @id @default(cuid())
+  listingId               String
+  listing                 Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  date                    DateTime
+  baseRate                Float
+  occupancyAdjustment     Float    @default(0)
+  bookingPaceAdjustment   Float    @default(0)
+  marketCompAdjustment    Float    @default(0)
+  aiSuggestedRate         Float?
+  manualLockRate          Float?
+  finalPreviewRate        Float
+  rateSource              String   @default("base")
+  createdAt               DateTime @default(now())
+
+  @@index([listingId])
+  @@unique([listingId, date])
 }
 
 // ─── Content Linking System ──────────────────────────────────────────

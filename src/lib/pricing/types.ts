@@ -73,6 +73,36 @@ export interface ReservationRange {
   checkOut: Date;
 }
 
+export interface OccupancyRuleSettings {
+  lowOccupancyThreshold: number;
+  highOccupancyThreshold: number;
+  lowOccupancyAdjustmentPercent: number;
+  highOccupancyAdjustmentPercent: number;
+  maxIncreasePercent: number;
+  maxDecreasePercent: number;
+  applyWeekdays: boolean;
+  applyWeekends: boolean;
+  excludeLockedDates: boolean;
+  excludeEventDates: boolean;
+}
+
+export interface BookingPaceRuleSettings {
+  fastPaceThresholdPercent: number;
+  slowPaceThresholdPercent: number;
+  fastPaceAdjustmentPercent: number;
+  slowPaceAdjustmentPercent: number;
+  maxAdjustmentPercent: number;
+  excludeLockedDates: boolean;
+}
+
+export interface MarketCompRuleSettings {
+  targetMarketPosition: string;
+  adjustmentStrength: string;
+  maxIncreasePercent: number;
+  maxDecreasePercent: number;
+  excludeLockedDates: boolean;
+}
+
 export interface NightlyRateContext {
   date: Date;
   baseRate: number;
@@ -84,6 +114,9 @@ export interface NightlyRateContext {
   occupancyPercent: number;
   bookingPacePercent: number;
   marketCompRate: number | null;
+  occupancyRuleSettings?: OccupancyRuleSettings | null;
+  bookingPaceRuleSettings?: BookingPaceRuleSettings | null;
+  marketCompRuleSettings?: MarketCompRuleSettings | null;
 }
 
 export interface RuleAdjustment {

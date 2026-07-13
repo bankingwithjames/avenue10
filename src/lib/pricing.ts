@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { calculateBookingQuote } from "@/lib/pricing/calculateBookingQuote";
+import type { PricingConfig, AddOnItem, PromoCode, ManualOverride, NightlyBreakdown } from "@/lib/pricing/types";
 
 export interface NightlyRate {
   date: string;
@@ -9,6 +11,7 @@ export interface NightlyRate {
 export interface PriceBreakdown {
   nights: number;
   nightlyRates: NightlyRate[];
+  nightlyBreakdown: NightlyBreakdown[];
   subtotal: number;
   cleaningFee: number;
   petFee: number;
@@ -45,28 +48,6 @@ export async function calculatePricing(
 
   if (!listing) throw new Error("Listing not found");
 
-  const nights = Math.ceil(
-    (checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24)
-  );
-
-  if (nights <= 0) throw new Error("Check-out must be after check-in");
-
-  const dates: Date[] = [];
-  for (let i = 0; i < nights; i++) {
-    const d = new Date(checkIn);
-    d.setDate(d.getDate() + i);
-    dates.push(d);
-  }
-
-  // FinalDailyRate overrides (highest priority)
-  const dailyRates = await prisma.finalDailyRate.findMany({
-    where: { listingId, date: { in: dates } },
-  });
-  const rateMap = new Map(
-    dailyRates.map((r) => [r.date.toISOString().split("T")[0], r])
-  );
-
-  // SalesConfig (primary source)
   const salesConfig = await prisma.salesConfig.findUnique({
     where: { listingId },
     include: { addOns: { where: { isActive: true } } },
@@ -75,174 +56,155 @@ export async function calculatePricing(
   const useSalesConfig = salesConfig && salesConfig.isActive;
   const config = listing.pricingConfig;
 
-  // Base rate: SalesConfig > PricingConfig > Listing
-  const baseRate = useSalesConfig
-    ? salesConfig.boardRate
-    : config?.baseNightlyRate || listing.pricePerNight;
+  const pricingConfig: PricingConfig = {
+    boardRate: useSalesConfig
+      ? salesConfig.boardRate
+      : config?.baseNightlyRate || listing.pricePerNight,
+    weekendRate: useSalesConfig
+      ? salesConfig.weekendRate ?? null
+      : config?.weekendRate ?? null,
+    cleaningFee: useSalesConfig
+      ? salesConfig.cleaningFee
+      : config?.cleaningFee ?? listing.cleaningFee,
+    taxRate: useSalesConfig ? salesConfig.taxRate : 0,
+    taxLabel: useSalesConfig ? salesConfig.taxLabel : "Taxes & Fees",
+    serviceFeePercent: useSalesConfig ? salesConfig.serviceFeePercent : 0,
+    serviceFeeFlat: useSalesConfig ? salesConfig.serviceFeeFlat : 0,
+    serviceFeeLabel: useSalesConfig ? salesConfig.serviceFeeLabel : "Service Fee",
+    depositHoldPercent: useSalesConfig ? salesConfig.depositHoldPercent : 0,
+    depositHoldFlat: useSalesConfig ? salesConfig.depositHoldFlat : 0,
+    depositHoldLabel: useSalesConfig ? salesConfig.depositHoldLabel : "Security Deposit Hold",
+    petFee: useSalesConfig ? salesConfig.petFee : config?.petFee ?? 0,
+    extraGuestFee: useSalesConfig ? salesConfig.extraGuestFee : config?.extraGuestFee ?? 0,
+    extraGuestFeeType: (useSalesConfig ? salesConfig.extraGuestFeeType : "per_night") as "per_night" | "flat",
+    guestsIncluded: useSalesConfig
+      ? salesConfig.guestsIncluded
+      : listing.maxGuests > 2 ? 2 : listing.maxGuests,
+    minimumStay: useSalesConfig ? salesConfig.minimumStay : config?.minimumStay ?? 1,
+    maximumStay: useSalesConfig ? salesConfig.maximumStay : 30,
+  };
 
-  const weekendRate = useSalesConfig
-    ? salesConfig.weekendRate
-    : config?.weekendRate ?? null;
+  // Fetch FinalDailyRate overrides as manual overrides
+  const nights = Math.ceil(
+    (checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24)
+  );
+  const dates: Date[] = [];
+  for (let i = 0; i < nights; i++) {
+    const d = new Date(checkIn);
+    d.setDate(d.getDate() + i);
+    dates.push(d);
+  }
 
-  // Build nightly rates: FinalDailyRate > weekend/base
-  const nightlyRates: NightlyRate[] = dates.map((d) => {
-    const key = d.toISOString().split("T")[0];
-    const daily = rateMap.get(key);
-    if (daily) {
-      return { date: key, rate: daily.finalRate, source: daily.rateSource };
-    }
-    if (weekendRate && (d.getDay() === 5 || d.getDay() === 6)) {
-      return { date: key, rate: weekendRate, source: "weekend" };
-    }
-    return { date: key, rate: baseRate, source: "base" };
+  const dailyRates = await prisma.finalDailyRate.findMany({
+    where: { listingId, date: { in: dates } },
   });
 
-  const subtotal = nightlyRates.reduce((sum, n) => sum + n.rate, 0);
+  const manualOverrides: ManualOverride[] = dailyRates.map((r) => ({
+    date: r.date.toISOString().split("T")[0],
+    rate: r.finalRate,
+    isLocked: true,
+  }));
 
-  // Cleaning fee
-  const cleaningFee = useSalesConfig
-    ? salesConfig.cleaningFee
-    : config?.cleaningFee ?? listing.cleaningFee;
+  // Fetch dynamic pricing settings
+  const dynamicSettings = await prisma.dynamicPricingSettings.findUnique({
+    where: { listingId },
+  });
 
-  // Extra guest fee
-  const extraGuestThreshold = useSalesConfig
-    ? salesConfig.guestsIncluded
-    : listing.maxGuests > 2
-      ? 2
-      : listing.maxGuests;
-  const extraGuestRate = useSalesConfig
-    ? salesConfig.extraGuestFee
-    : config?.extraGuestFee ?? 0;
-  const extraGuests = Math.max(0, guests - extraGuestThreshold);
-  const extraGuestFee = extraGuests * extraGuestRate * nights;
+  // Fetch reservations for gap-night detection
+  const reservations = await prisma.reservation.findMany({
+    where: { listingId, status: { in: ["confirmed", "pending"] } },
+    select: { checkIn: true, checkOut: true },
+  });
 
-  // Pet fee
-  const petFeeAmount = useSalesConfig
-    ? salesConfig.petFee
-    : config?.petFee ?? 0;
-  const petFee = options?.hasPets ? petFeeAmount : 0;
+  // Map add-ons to engine type
+  const addOns: AddOnItem[] = useSalesConfig
+    ? salesConfig.addOns.map((a) => ({
+        name: a.name,
+        price: a.price,
+        pricingType: a.pricingType as "flat" | "per_night" | "per_guest" | "percentage",
+        taxable: a.taxable,
+      }))
+    : [];
 
-  // Tax
-  const taxRate = useSalesConfig ? salesConfig.taxRate : 0;
-  const taxLabel = useSalesConfig ? salesConfig.taxLabel : "Taxes & Fees";
-  const taxableAmount = subtotal + cleaningFee + petFee + extraGuestFee;
-  const taxAmount = taxableAmount * (taxRate / 100);
-
-  // Service fee
-  let serviceFee = 0;
-  const serviceFeeLabel = useSalesConfig
-    ? salesConfig.serviceFeeLabel
-    : "Service Fee";
-  if (useSalesConfig) {
-    if (salesConfig.serviceFeePercent > 0) {
-      serviceFee = subtotal * (salesConfig.serviceFeePercent / 100);
-    } else {
-      serviceFee = salesConfig.serviceFeeFlat;
-    }
-  }
-
-  // Add-ons
-  const matchedAddOns: { name: string; price: number; pricingType: string }[] = [];
-  if (
-    useSalesConfig &&
-    options?.selectedAddOns &&
-    salesConfig.addOns.length > 0
-  ) {
-    for (const addOnName of options.selectedAddOns) {
-      const found = salesConfig.addOns.find(
-        (a) => a.name.toLowerCase() === addOnName.toLowerCase()
-      );
-      if (found) {
-        let addOnPrice = found.price;
-        if (found.pricingType === "per_night") {
-          addOnPrice = found.price * nights;
-        } else if (found.pricingType === "per_guest") {
-          addOnPrice = found.price * guests;
-        } else if (found.pricingType === "percentage") {
-          addOnPrice = subtotal * (found.price / 100);
-        }
-        matchedAddOns.push({
-          name: found.name,
-          price: addOnPrice,
-          pricingType: found.pricingType,
-        });
-      }
-    }
-  }
-  const addOnsTotal = matchedAddOns.reduce((sum, a) => sum + a.price, 0);
-
-  // Promo code discount
-  let promoDiscount = 0;
-  let appliedPromoCode: string | null = null;
-
+  // Fetch promo code if provided
+  let promoCode: PromoCode | null = null;
   if (options?.promoCode) {
     const promo = await prisma.promoCode.findUnique({
       where: { code: options.promoCode.toUpperCase() },
     });
-    if (promo && promo.isActive) {
-      const now = new Date();
-      const validDate =
-        (!promo.startDate || promo.startDate <= now) &&
-        (!promo.endDate || promo.endDate >= now);
-      const validUses = promo.maxUses === 0 || promo.currentUses < promo.maxUses;
-      const validNights = nights >= promo.minimumNights;
-      const validListing = !promo.listingId || promo.listingId === listingId;
+    if (promo) {
+      promoCode = {
+        code: promo.code,
+        discountType: promo.discountType as "percentage" | "flat",
+        discountValue: promo.discountValue,
+        listingId: promo.listingId,
+        startDate: promo.startDate,
+        endDate: promo.endDate,
+        minimumNights: promo.minimumNights,
+        maxUses: promo.maxUses,
+        currentUses: promo.currentUses,
+        isActive: promo.isActive,
+      };
+    }
+  }
 
-      if (validDate && validUses && validNights && validListing) {
-        if (promo.discountType === "percentage") {
-          promoDiscount = subtotal * (promo.discountValue / 100);
-        } else {
-          promoDiscount = promo.discountValue;
+  const result = calculateBookingQuote({
+    checkIn,
+    checkOut,
+    guests,
+    hasPets: options?.hasPets ?? false,
+    pricingConfig,
+    dynamicSettings: dynamicSettings
+      ? {
+          enabled: dynamicSettings.enabled,
+          pricingMode: dynamicSettings.pricingMode as "conservative" | "balanced" | "aggressive",
+          minimumRate: dynamicSettings.minimumRate,
+          maximumRate: dynamicSettings.maximumRate,
+          weekendPremiumPercent: dynamicSettings.weekendPremiumPercent,
+          eventPremiumPercent: dynamicSettings.eventPremiumPercent,
+          gapNightDiscountPercent: dynamicSettings.gapNightDiscountPercent,
+          lastMinuteDiscountPercent: dynamicSettings.lastMinuteDiscountPercent,
+          farOutPremiumPercent: dynamicSettings.farOutPremiumPercent,
+          occupancyBasedEnabled: dynamicSettings.occupancyBasedEnabled,
+          bookingPaceEnabled: dynamicSettings.bookingPaceEnabled,
+          marketCompEnabled: dynamicSettings.marketCompEnabled,
+          manualPriceLockEnabled: dynamicSettings.manualPriceLockEnabled,
         }
-        appliedPromoCode = promo.code;
-      }
-    }
-  }
-
-  // Total before deposit
-  const totalBeforeDeposit =
-    subtotal +
-    cleaningFee +
-    petFee +
-    extraGuestFee +
-    taxAmount +
-    serviceFee +
-    addOnsTotal -
-    promoDiscount;
-
-  // Deposit hold
-  let depositHold = 0;
-  const depositHoldLabel = useSalesConfig
-    ? salesConfig.depositHoldLabel
-    : "Security Deposit Hold";
-  if (useSalesConfig) {
-    if (salesConfig.depositHoldPercent > 0) {
-      depositHold = totalBeforeDeposit * (salesConfig.depositHoldPercent / 100);
-    } else {
-      depositHold = salesConfig.depositHoldFlat;
-    }
-  }
-
-  const total = totalBeforeDeposit + depositHold;
+      : null,
+    manualOverrides,
+    reservations: reservations.map((r) => ({
+      checkIn: new Date(r.checkIn),
+      checkOut: new Date(r.checkOut),
+    })),
+    addOns,
+    selectedAddOnNames: options?.selectedAddOns ?? [],
+    promoCode,
+    listingId,
+  });
 
   return {
-    nights,
-    nightlyRates,
-    subtotal,
-    cleaningFee,
-    petFee,
-    extraGuestFee,
-    taxRate,
-    taxLabel,
-    taxAmount,
-    serviceFeeLabel,
-    serviceFee,
-    depositHoldLabel,
-    depositHold,
-    addOns: matchedAddOns,
-    addOnsTotal,
-    promoDiscount,
-    promoCode: appliedPromoCode,
-    total,
+    nights: result.nights,
+    nightlyRates: result.nightlyBreakdown.map((n) => ({
+      date: n.date,
+      rate: n.rate,
+      source: n.source,
+    })),
+    nightlyBreakdown: result.nightlyBreakdown,
+    subtotal: result.subtotal,
+    cleaningFee: result.cleaningFee,
+    petFee: result.petFee,
+    extraGuestFee: result.extraGuestFee,
+    taxRate: result.taxRate,
+    taxLabel: result.taxLabel,
+    taxAmount: result.taxAmount,
+    serviceFeeLabel: result.serviceFeeLabel,
+    serviceFee: result.serviceFee,
+    depositHoldLabel: result.depositHoldLabel,
+    depositHold: result.depositHold,
+    addOns: result.addOns,
+    addOnsTotal: result.addOnsTotal,
+    promoDiscount: result.promoDiscount,
+    promoCode: result.promoCode,
+    total: result.total,
   };
 }

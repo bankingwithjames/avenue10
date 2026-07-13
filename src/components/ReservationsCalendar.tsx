@@ -16,6 +16,7 @@ interface ListingData {
   type: string;
   closedDates: string[];
   bookedRanges: { checkIn: string; checkOut: string }[];
+  dailyRates?: { date: string; rate: number }[];
 }
 
 function toDateKey(d: Date) {
@@ -64,6 +65,19 @@ export function ReservationsCalendar({ listings }: { listings: ListingData[] }) 
     if (!listing) return new Set<string>();
     return new Set(listing.closedDates);
   }, [listing]);
+
+  const rateMap = useMemo(() => {
+    if (!listing?.dailyRates) return new Map<string, number>();
+    const map = new Map<string, number>();
+    for (const r of listing.dailyRates) {
+      map.set(r.date, r.rate);
+    }
+    return map;
+  }, [listing]);
+
+  function getRateForDate(dateKey: string): number {
+    return rateMap.get(dateKey) ?? listing.pricePerNight;
+  }
 
   function getDateStatus(dateKey: string) {
     if (dateKey < todayKey) return "past";
@@ -126,7 +140,18 @@ export function ReservationsCalendar({ listings }: { listings: ListingData[] }) 
   }
 
   const nights = checkIn && checkOut ? daysBetween(checkIn, checkOut) : 0;
-  const estimatedTotal = nights > 0 ? nights * listing.pricePerNight + listing.cleaningFee : 0;
+  const nightlyTotal = useMemo(() => {
+    if (!checkIn || !checkOut || nights <= 0) return 0;
+    let total = 0;
+    const d = new Date(checkIn + "T00:00:00");
+    const end = new Date(checkOut + "T00:00:00");
+    while (d < end) {
+      total += getRateForDate(toDateKey(d));
+      d.setDate(d.getDate() + 1);
+    }
+    return total;
+  }, [checkIn, checkOut, nights, rateMap, listing.pricePerNight]);
+  const estimatedTotal = nights > 0 ? nightlyTotal + listing.cleaningFee : 0;
 
   async function handleBookNow() {
     if (!checkIn || !checkOut || !listing) return;
@@ -326,7 +351,7 @@ export function ReservationsCalendar({ listings }: { listings: ListingData[] }) 
                   <span className={`text-sm font-light ${textClass}`}>{day}</span>
                   {status === "available" && (
                     <span className={`text-[9px] font-medium ${priceColor}`}>
-                      ${listing.pricePerNight}
+                      ${getRateForDate(dateKey)}
                     </span>
                   )}
                   {status === "booked" && (
@@ -373,7 +398,7 @@ export function ReservationsCalendar({ listings }: { listings: ListingData[] }) 
           </div>
           <div className="bg-white border border-light-gray p-4 text-center">
             <p className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium mb-1">Nightly Rate</p>
-            <p className="text-2xl font-light text-charcoal">${listing.pricePerNight}</p>
+            <p className="text-2xl font-light text-charcoal">{rateMap.size > 0 ? `$${Math.min(...rateMap.values())}–$${Math.max(...rateMap.values())}` : `$${listing.pricePerNight}`}</p>
           </div>
           <div className="bg-white border border-light-gray p-4 text-center">
             <p className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium mb-1">Cleaning Fee</p>
@@ -403,8 +428,8 @@ export function ReservationsCalendar({ listings }: { listings: ListingData[] }) 
           </div>
           <div className="border-t border-light-gray pt-4">
             <div className="flex items-baseline gap-1">
-              <span className="font-serif text-3xl text-charcoal">${listing.pricePerNight}</span>
-              <span className="text-sm text-warm-gray">/ night</span>
+              <span className="font-serif text-3xl text-charcoal">{rateMap.size > 0 ? `$${Math.min(...rateMap.values())}` : `$${listing.pricePerNight}`}</span>
+              <span className="text-sm text-warm-gray">{rateMap.size > 0 ? "+ / night" : "/ night"}</span>
             </div>
             {listing.cleaningFee > 0 && (
               <p className="text-xs text-warm-gray mt-1">+ ${listing.cleaningFee} cleaning fee</p>
@@ -460,8 +485,8 @@ export function ReservationsCalendar({ listings }: { listings: ListingData[] }) 
           {nights > 0 && (
             <div className="space-y-2 text-sm border-t border-light-gray pt-4 mb-5">
               <div className="flex justify-between text-charcoal/60">
-                <span>${listing.pricePerNight} &times; {nights} night{nights > 1 ? "s" : ""}</span>
-                <span>${nights * listing.pricePerNight}</span>
+                <span>{nights} night{nights > 1 ? "s" : ""}</span>
+                <span>${nightlyTotal}</span>
               </div>
               {listing.cleaningFee > 0 && (
                 <div className="flex justify-between text-charcoal/60">
@@ -526,7 +551,7 @@ export function ReservationsCalendar({ listings }: { listings: ListingData[] }) 
               {[2, 3, 5, 7].map((n) => (
                 <div key={n} className="flex justify-between">
                   <span className="text-warm-gray">{n} nights</span>
-                  <span className="text-charcoal">${n * listing.pricePerNight + listing.cleaningFee}</span>
+                  <span className="text-charcoal">${n * (rateMap.size > 0 ? Math.round([...rateMap.values()].reduce((a, b) => a + b, 0) / rateMap.size) : listing.pricePerNight) + listing.cleaningFee}</span>
                 </div>
               ))}
             </div>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/adminAuth";
 import { prisma } from "@/lib/prisma";
+import { generateDynamicRates } from "@/lib/dynamic-pricing";
 
 export async function GET(req: NextRequest) {
   const { error } = await requireAdmin();
@@ -36,7 +37,8 @@ export async function POST(req: NextRequest) {
       create: { listingId, ...data },
     });
 
-    return NextResponse.json(settings);
+    const result = await generateDynamicRates(listingId);
+    return NextResponse.json({ ...settings, ratesGenerated: result.generated });
   } catch (err) {
     console.error("Dynamic pricing save error:", err);
     return NextResponse.json({ error: "Failed to save" }, { status: 500 });

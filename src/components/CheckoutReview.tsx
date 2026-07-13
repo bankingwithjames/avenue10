@@ -28,6 +28,8 @@ interface Quote {
   depositHold: number;
   addOnsTotal: number;
   addOnsBreakdown: { name: string; price: number }[] | null;
+  promoCode: string | null;
+  promoDiscount: number;
   total: number;
   expiresAt: string;
   listing: {
@@ -46,6 +48,7 @@ interface BookingRule {
   depositPercent: number;
   depositFlat: number;
   requireAgreement: boolean;
+  extraGuestFeeType?: string;
 }
 
 interface BookingResult {
@@ -71,10 +74,11 @@ interface CheckoutData {
   zip: string;
   country: string;
   specialRequests: string;
-  earlyCheckin: boolean;
-  lateCheckout: boolean;
-  needsCrib: boolean;
-  needsHighChair: boolean;
+  selectedAddOns: string[];
+  earlyCheckin?: boolean;
+  lateCheckout?: boolean;
+  needsCrib?: boolean;
+  needsHighChair?: boolean;
   agreedToRules: boolean;
   paymentMethod: string;
 }
@@ -110,6 +114,7 @@ function formatDate(dateStr: string): string {
     month: "short",
     day: "numeric",
     year: "numeric",
+    timeZone: "UTC",
   });
 }
 
@@ -205,10 +210,7 @@ export function CheckoutReview({ quoteId }: { quoteId: string }) {
           },
           agreedToRules: formData.agreedToRules,
           depositAmount,
-          earlyCheckin: formData.earlyCheckin,
-          lateCheckout: formData.lateCheckout,
-          needsCrib: formData.needsCrib,
-          needsHighChair: formData.needsHighChair,
+          selectedAddOns: formData.selectedAddOns,
           paymentMethod: formData.paymentMethod,
         }),
       });
@@ -340,16 +342,9 @@ export function CheckoutReview({ quoteId }: { quoteId: string }) {
 
   const depositAmount = calculateDeposit(quote.total, rule);
 
-  const specialRequestItems: string[] = [];
-  if (formData.earlyCheckin)
-    specialRequestItems.push("Early check-in (before 3:00 PM)");
-  if (formData.lateCheckout)
-    specialRequestItems.push("Late check-out (after 11:00 AM)");
-  if (formData.needsCrib) specialRequestItems.push("Pack-n-play / Crib");
-  if (formData.needsHighChair) specialRequestItems.push("High chair");
-
+  const selectedAddOnNames = formData.selectedAddOns ?? [];
   const hasSpecialRequests =
-    formData.specialRequests.trim() || specialRequestItems.length > 0;
+    formData.specialRequests.trim() || selectedAddOnNames.length > 0;
 
   return (
     <div className="max-w-[1100px] mx-auto px-6">
@@ -484,16 +479,13 @@ export function CheckoutReview({ quoteId }: { quoteId: string }) {
           {/* 5. Special Requests */}
           {hasSpecialRequests && (
             <div className="bg-white border border-light-gray p-8">
-              <p className={sectionHeaderClass}>Special Requests</p>
+              <p className={sectionHeaderClass}>
+                {selectedAddOnNames.length > 0 ? "Add-Ons & Special Requests" : "Special Requests"}
+              </p>
               <div className="space-y-3">
-                {formData.specialRequests.trim() && (
-                  <p className="text-sm text-charcoal leading-relaxed">
-                    {formData.specialRequests}
-                  </p>
-                )}
-                {specialRequestItems.length > 0 && (
+                {selectedAddOnNames.length > 0 && (
                   <ul className="space-y-1.5">
-                    {specialRequestItems.map((item) => (
+                    {selectedAddOnNames.map((item) => (
                       <li
                         key={item}
                         className="text-sm text-charcoal flex items-center gap-2"
@@ -506,6 +498,11 @@ export function CheckoutReview({ quoteId }: { quoteId: string }) {
                       </li>
                     ))}
                   </ul>
+                )}
+                {formData.specialRequests.trim() && (
+                  <p className="text-sm text-charcoal leading-relaxed">
+                    {formData.specialRequests}
+                  </p>
                 )}
               </div>
             </div>
@@ -591,12 +588,14 @@ export function CheckoutReview({ quoteId }: { quoteId: string }) {
                   {checkInDate.toLocaleDateString("en-US", {
                     month: "short",
                     day: "numeric",
+                    timeZone: "UTC",
                   })}{" "}
                   &ndash;{" "}
                   {checkOutDate.toLocaleDateString("en-US", {
                     month: "short",
                     day: "numeric",
                     year: "numeric",
+                    timeZone: "UTC",
                   })}
                 </span>
                 <span>
@@ -625,7 +624,7 @@ export function CheckoutReview({ quoteId }: { quoteId: string }) {
                 )}
                 {quote.extraGuestFee > 0 && (
                   <div className="flex justify-between text-charcoal/60">
-                    <span>Extra guest fee</span>
+                    <span>Extra guest fee <span className="text-[9px] text-warm-gray">({rule?.extraGuestFeeType === "per_stay" ? "per stay" : "per night"})</span></span>
                     <span>${quote.extraGuestFee.toFixed(2)}</span>
                   </div>
                 )}
@@ -651,18 +650,29 @@ export function CheckoutReview({ quoteId }: { quoteId: string }) {
                     ))}
                   </>
                 )}
-                {quote.depositHold > 0 && (
-                  <div className="flex justify-between text-charcoal/60">
-                    <span>Deposit hold <span className="text-[9px]">(refundable)</span></span>
-                    <span>${quote.depositHold.toFixed(2)}</span>
+                {quote.promoDiscount > 0 && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Promo ({quote.promoCode})</span>
+                    <span>-${quote.promoDiscount.toFixed(2)}</span>
                   </div>
                 )}
               </div>
 
               <div className="flex justify-between font-medium text-charcoal border-t border-light-gray pt-3">
-                <span>Final charge</span>
+                <span>Final Charge</span>
                 <span>${quote.total.toFixed(2)}</span>
               </div>
+              {quote.depositHold > 0 && (
+                <div className="mt-3 pt-3 border-t border-dashed border-light-gray">
+                  <div className="flex justify-between text-charcoal/60 text-sm">
+                    <span>Security Deposit Hold <span className="text-[9px]">(refundable)</span></span>
+                    <span>${quote.depositHold.toFixed(2)}</span>
+                  </div>
+                  <p className="text-[9px] text-warm-gray mt-1">
+                    Charged upon signing rental agreement
+                  </p>
+                </div>
+              )}
             </div>
 
             {minutesLeft > 0 && minutesLeft <= 10 && (

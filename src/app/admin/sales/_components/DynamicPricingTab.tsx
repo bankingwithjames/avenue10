@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { ChevronLeft, ChevronRight, Lock, Unlock } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Lock, Unlock } from "lucide-react";
 import {
   NumberInput,
   SelectInput,
@@ -18,13 +18,13 @@ import {
 export interface DynamicPricingData {
   enabled: boolean;
   pricingMode: string;
-  minimumRate: number;
-  maximumRate: number;
-  weekendPremiumPercent: number;
-  eventPremiumPercent: number;
-  gapNightDiscountPercent: number;
-  lastMinuteDiscountPercent: number;
-  farOutPremiumPercent: number;
+  minimumRate: number | null;
+  maximumRate: number | null;
+  weekendPremiumPercent: number | null;
+  eventPremiumPercent: number | null;
+  gapNightDiscountPercent: number | null;
+  lastMinuteDiscountPercent: number | null;
+  farOutPremiumPercent: number | null;
   occupancyBasedEnabled: boolean;
   bookingPaceEnabled: boolean;
   marketCompEnabled: boolean;
@@ -68,6 +68,7 @@ interface DynamicPricingTabProps {
   onUpdateDynamic: <K extends keyof DynamicPricingData>(field: K, value: DynamicPricingData[K]) => void;
   onSaveDynamic: () => Promise<void>;
   savingDynamic: boolean;
+  saveResult?: string | null;
 }
 
 export default function DynamicPricingTab({
@@ -76,6 +77,7 @@ export default function DynamicPricingTab({
   onUpdateDynamic,
   onSaveDynamic,
   savingDynamic,
+  saveResult,
 }: DynamicPricingTabProps) {
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const now = new Date();
@@ -84,7 +86,7 @@ export default function DynamicPricingTab({
   const [dailyRates, setDailyRates] = useState<DailyRate[]>([]);
   const [loadingRates, setLoadingRates] = useState(false);
   const [editingDate, setEditingDate] = useState<string | null>(null);
-  const [editRate, setEditRate] = useState<number>(0);
+  const [editRate, setEditRate] = useState<number | string>(0);
 
   const loadDailyRates = useCallback(async () => {
     setLoadingRates(true);
@@ -193,13 +195,13 @@ export default function DynamicPricingTab({
                 <NumberInput
                   label="Minimum Rate"
                   value={dynamicPricing.minimumRate}
-                  onChange={(v) => onUpdateDynamic("minimumRate", v ?? 0)}
+                  onChange={(v) => onUpdateDynamic("minimumRate", v)}
                   prefix="$"
                 />
                 <NumberInput
                   label="Maximum Rate"
                   value={dynamicPricing.maximumRate}
-                  onChange={(v) => onUpdateDynamic("maximumRate", v ?? 0)}
+                  onChange={(v) => onUpdateDynamic("maximumRate", v)}
                   prefix="$"
                 />
               </div>
@@ -208,14 +210,14 @@ export default function DynamicPricingTab({
                 <NumberInput
                   label="Weekend Premium"
                   value={dynamicPricing.weekendPremiumPercent}
-                  onChange={(v) => onUpdateDynamic("weekendPremiumPercent", v ?? 0)}
+                  onChange={(v) => onUpdateDynamic("weekendPremiumPercent", v)}
                   suffix="%"
                   step={0.5}
                 />
                 <NumberInput
                   label="Event Premium"
                   value={dynamicPricing.eventPremiumPercent}
-                  onChange={(v) => onUpdateDynamic("eventPremiumPercent", v ?? 0)}
+                  onChange={(v) => onUpdateDynamic("eventPremiumPercent", v)}
                   suffix="%"
                   step={0.5}
                 />
@@ -223,7 +225,7 @@ export default function DynamicPricingTab({
                   label="Gap-Night Discount"
                   value={dynamicPricing.gapNightDiscountPercent}
                   onChange={(v) =>
-                    onUpdateDynamic("gapNightDiscountPercent", v ?? 0)
+                    onUpdateDynamic("gapNightDiscountPercent", v)
                   }
                   suffix="%"
                   step={0.5}
@@ -232,7 +234,7 @@ export default function DynamicPricingTab({
                   label="Last-Minute Discount"
                   value={dynamicPricing.lastMinuteDiscountPercent}
                   onChange={(v) =>
-                    onUpdateDynamic("lastMinuteDiscountPercent", v ?? 0)
+                    onUpdateDynamic("lastMinuteDiscountPercent", v)
                   }
                   suffix="%"
                   step={0.5}
@@ -241,7 +243,7 @@ export default function DynamicPricingTab({
                   label="Far-Out Booking Premium"
                   value={dynamicPricing.farOutPremiumPercent}
                   onChange={(v) =>
-                    onUpdateDynamic("farOutPremiumPercent", v ?? 0)
+                    onUpdateDynamic("farOutPremiumPercent", v)
                   }
                   suffix="%"
                   step={0.5}
@@ -293,13 +295,23 @@ export default function DynamicPricingTab({
             </>
           )}
 
-          <button
-            className={btnClass}
-            onClick={onSaveDynamic}
-            disabled={savingDynamic}
-          >
-            {savingDynamic ? "Saving..." : "Save Dynamic Pricing Settings"}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              className={btnClass}
+              onClick={async () => {
+                await onSaveDynamic();
+                loadDailyRates();
+              }}
+              disabled={savingDynamic}
+            >
+              {savingDynamic ? "Generating rates..." : "Save Dynamic Pricing Settings"}
+            </button>
+            {saveResult && (
+              <span className="text-xs text-charcoal/60 flex items-center gap-1">
+                <Check size={12} /> {saveResult}
+              </span>
+            )}
+          </div>
         </div>
       </Card>
 
@@ -406,17 +418,17 @@ export default function DynamicPricingTab({
                         type="number"
                         className="w-full text-[10px] border border-charcoal/30 px-1 py-0.5 text-charcoal"
                         value={editRate}
-                        onChange={(e) => setEditRate(Number(e.target.value))}
+                        onChange={(e) => setEditRate(e.target.value === "" ? "" : Number(e.target.value))}
                         autoFocus
                         onKeyDown={(e) => {
-                          if (e.key === "Enter") saveOverride(dateStr, editRate);
+                          if (e.key === "Enter") saveOverride(dateStr, Number(editRate) || 0);
                           if (e.key === "Escape") setEditingDate(null);
                         }}
                       />
                       <div className="flex gap-0.5 mt-0.5">
                         <button
                           className="text-[8px] bg-charcoal text-white px-1 py-0.5"
-                          onClick={() => saveOverride(dateStr, editRate)}
+                          onClick={() => saveOverride(dateStr, Number(editRate) || 0)}
                         >
                           Save
                         </button>
@@ -434,9 +446,6 @@ export default function DynamicPricingTab({
                         <div className="mt-1">
                           <span className="text-xs font-medium text-charcoal block">
                             {fmt(rate.finalRate)}
-                          </span>
-                          <span className="text-[8px] text-warm-gray">
-                            {rate.rateSource}
                           </span>
                         </div>
                       ) : (

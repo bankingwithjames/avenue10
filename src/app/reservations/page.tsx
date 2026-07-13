@@ -18,23 +18,46 @@ export default async function ReservationsPage() {
       bathrooms: true,
       maxGuests: true,
       type: true,
+      salesConfig: {
+        select: {
+          isActive: true,
+          boardRate: true,
+          cleaningFee: true,
+          maxGuests: true,
+        },
+      },
       closedDates: { select: { date: true } },
       reservations: {
         where: { status: { in: ["confirmed", "pending"] } },
         select: { checkIn: true, checkOut: true },
       },
+      dailyRates: {
+        where: { date: { gte: new Date() } },
+        select: { date: true, finalRate: true, rateSource: true },
+        orderBy: { date: "asc" },
+      },
     },
     orderBy: { createdAt: "asc" },
   });
 
-  const serialized = listings.map((l) => ({
-    ...l,
-    closedDates: l.closedDates.map((d) => d.date.toISOString().split("T")[0]),
-    bookedRanges: l.reservations.map((r) => ({
-      checkIn: r.checkIn.toISOString().split("T")[0],
-      checkOut: r.checkOut.toISOString().split("T")[0],
-    })),
-  }));
+  const serialized = listings.map((l) => {
+    const sc = l.salesConfig?.isActive ? l.salesConfig : null;
+    return {
+      ...l,
+      pricePerNight: sc ? sc.boardRate : l.pricePerNight,
+      cleaningFee: sc ? sc.cleaningFee : l.cleaningFee,
+      maxGuests: sc ? sc.maxGuests : l.maxGuests,
+      closedDates: l.closedDates.map((d) => d.date.toISOString().split("T")[0]),
+      bookedRanges: l.reservations.map((r) => ({
+        checkIn: r.checkIn.toISOString().split("T")[0],
+        checkOut: r.checkOut.toISOString().split("T")[0],
+      })),
+      dailyRates: l.dailyRates.map((r) => ({
+        date: r.date.toISOString().split("T")[0],
+        rate: r.finalRate,
+      })),
+    };
+  });
 
   return (
     <>

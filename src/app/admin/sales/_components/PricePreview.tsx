@@ -29,8 +29,8 @@ export default function PricePreview({
   const taxAmount = taxableAmount * ((form.taxRate || 0) / 100);
 
   let serviceFee = 0;
-  if (form.serviceFeePercent > 0) {
-    serviceFee = subtotal * (form.serviceFeePercent / 100);
+  if ((form.serviceFeePercent ?? 0) > 0) {
+    serviceFee = subtotal * ((form.serviceFeePercent ?? 0) / 100);
   } else {
     serviceFee = form.serviceFeeFlat || 0;
   }
@@ -42,8 +42,8 @@ export default function PricePreview({
     subtotal + cleaningFee + petFee + taxAmount + serviceFee + addOnsTotal;
 
   let depositHold = 0;
-  if (form.depositHoldPercent > 0) {
-    depositHold = totalBeforeDeposit * (form.depositHoldPercent / 100);
+  if ((form.depositHoldPercent ?? 0) > 0) {
+    depositHold = totalBeforeDeposit * ((form.depositHoldPercent ?? 0) / 100);
   } else {
     depositHold = form.depositHoldFlat || 0;
   }

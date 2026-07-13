@@ -60,6 +60,7 @@ export async function PUT(
       ...(body.cleaningFee !== undefined && { cleaningFee: body.cleaningFee }),
       ...(body.amenities !== undefined && { amenities: body.amenities }),
       ...(body.photos !== undefined && { photos: body.photos }),
+      ...(body.channelUrls !== undefined && { channelUrls: body.channelUrls }),
       ...(body.active !== undefined && { active: body.active }),
     },
   });

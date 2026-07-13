@@ -3,25 +3,26 @@
 import { NumberInput, TextInput, RadioGroup, Toggle, Card, sectionHeader } from "./shared";
 
 export interface PricingFormData {
-  boardRate: number;
+  boardRate: number | null;
   weekendRate: number | null;
-  cleaningFee: number;
-  petFee: number;
-  extraGuestFee: number;
-  extraGuestThreshold: number;
-  guestsIncluded: number;
-  maxGuests: number;
-  minimumStay: number;
-  maximumStay: number;
+  cleaningFee: number | null;
+  petFee: number | null;
+  extraGuestFee: number | null;
+  extraGuestFeeType: string;
+  extraGuestThreshold: number | null;
+  guestsIncluded: number | null;
+  maxGuests: number | null;
+  minimumStay: number | null;
+  maximumStay: number | null;
   sameDayBookingAllowed: boolean;
-  advanceNoticeHours: number;
-  taxRate: number;
+  advanceNoticeHours: number | null;
+  taxRate: number | null;
   taxLabel: string;
-  serviceFeePercent: number;
-  serviceFeeFlat: number;
+  serviceFeePercent: number | null;
+  serviceFeeFlat: number | null;
   serviceFeeLabel: string;
-  depositHoldPercent: number;
-  depositHoldFlat: number;
+  depositHoldPercent: number | null;
+  depositHoldFlat: number | null;
   depositHoldLabel: string;
 }
 
@@ -31,6 +32,7 @@ export const defaultPricingData: PricingFormData = {
   cleaningFee: 0,
   petFee: 0,
   extraGuestFee: 0,
+  extraGuestFeeType: "per_night",
   extraGuestThreshold: 2,
   guestsIncluded: 2,
   maxGuests: 10,
@@ -74,7 +76,7 @@ export default function PricingTab({
           <NumberInput
             label="Base Nightly Rate"
             value={form.boardRate}
-            onChange={(v) => onUpdate("boardRate", v ?? 0)}
+            onChange={(v) => onUpdate("boardRate", v)}
             prefix="$"
           />
           <NumberInput
@@ -87,39 +89,48 @@ export default function PricingTab({
           <NumberInput
             label="Cleaning Fee"
             value={form.cleaningFee}
-            onChange={(v) => onUpdate("cleaningFee", v ?? 0)}
+            onChange={(v) => onUpdate("cleaningFee", v)}
             prefix="$"
           />
           <NumberInput
             label="Pet Fee"
             value={form.petFee}
-            onChange={(v) => onUpdate("petFee", v ?? 0)}
+            onChange={(v) => onUpdate("petFee", v)}
             prefix="$"
           />
           <NumberInput
-            label="Extra Guest Fee (per guest/night)"
+            label={`Extra Guest Fee (per guest/${form.extraGuestFeeType === "per_night" ? "night" : "stay"})`}
             value={form.extraGuestFee}
-            onChange={(v) => onUpdate("extraGuestFee", v ?? 0)}
+            onChange={(v) => onUpdate("extraGuestFee", v)}
             prefix="$"
+          />
+          <RadioGroup
+            label="Extra Guest Fee Type"
+            value={form.extraGuestFeeType}
+            onChange={(v) => onUpdate("extraGuestFeeType", v)}
+            options={[
+              { value: "per_night", label: "Per Night" },
+              { value: "per_stay", label: "Per Stay" },
+            ]}
           />
           <NumberInput
             label="Guests Included in Base Rate"
             value={form.guestsIncluded}
-            onChange={(v) => onUpdate("guestsIncluded", v ?? 2)}
+            onChange={(v) => onUpdate("guestsIncluded", v)}
           />
           <NumberInput
             label="Max Guests Allowed"
             value={form.maxGuests}
-            onChange={(v) => onUpdate("maxGuests", v ?? 10)}
+            onChange={(v) => onUpdate("maxGuests", v)}
           />
           <NumberInput
             label="Security Deposit Hold"
-            value={form.depositHoldPercent > 0 ? form.depositHoldPercent : form.depositHoldFlat}
+            value={(form.depositHoldPercent ?? 0) > 0 ? form.depositHoldPercent : form.depositHoldFlat}
             onChange={(v) => {
               if (depositType === "percent") {
-                onUpdate("depositHoldPercent", v ?? 0);
+                onUpdate("depositHoldPercent", v);
               } else {
-                onUpdate("depositHoldFlat", v ?? 0);
+                onUpdate("depositHoldFlat", v);
               }
             }}
             prefix={depositType === "flat" ? "$" : undefined}
@@ -135,17 +146,17 @@ export default function PricingTab({
           <NumberInput
             label="Minimum Stay (nights)"
             value={form.minimumStay}
-            onChange={(v) => onUpdate("minimumStay", v ?? 1)}
+            onChange={(v) => onUpdate("minimumStay", v)}
           />
           <NumberInput
             label="Maximum Stay (nights)"
             value={form.maximumStay}
-            onChange={(v) => onUpdate("maximumStay", v ?? 30)}
+            onChange={(v) => onUpdate("maximumStay", v)}
           />
           <NumberInput
             label="Advance Notice (hours)"
             value={form.advanceNoticeHours}
-            onChange={(v) => onUpdate("advanceNoticeHours", v ?? 24)}
+            onChange={(v) => onUpdate("advanceNoticeHours", v)}
           />
         </div>
         <Toggle
@@ -163,7 +174,7 @@ export default function PricingTab({
           <NumberInput
             label="Tax Rate"
             value={form.taxRate}
-            onChange={(v) => onUpdate("taxRate", v ?? 0)}
+            onChange={(v) => onUpdate("taxRate", v)}
             suffix="%"
             step={0.1}
           />
@@ -193,7 +204,7 @@ export default function PricingTab({
               <NumberInput
                 label="Service Fee Percentage"
                 value={form.serviceFeePercent}
-                onChange={(v) => onUpdate("serviceFeePercent", v ?? 0)}
+                onChange={(v) => onUpdate("serviceFeePercent", v)}
                 suffix="%"
                 step={0.1}
               />
@@ -201,7 +212,7 @@ export default function PricingTab({
               <NumberInput
                 label="Service Fee Amount"
                 value={form.serviceFeeFlat}
-                onChange={(v) => onUpdate("serviceFeeFlat", v ?? 0)}
+                onChange={(v) => onUpdate("serviceFeeFlat", v)}
                 prefix="$"
               />
             )}
@@ -232,7 +243,7 @@ export default function PricingTab({
               <NumberInput
                 label="Deposit Percentage"
                 value={form.depositHoldPercent}
-                onChange={(v) => onUpdate("depositHoldPercent", v ?? 0)}
+                onChange={(v) => onUpdate("depositHoldPercent", v)}
                 suffix="%"
                 step={0.1}
               />
@@ -240,7 +251,7 @@ export default function PricingTab({
               <NumberInput
                 label="Deposit Amount"
                 value={form.depositHoldFlat}
-                onChange={(v) => onUpdate("depositHoldFlat", v ?? 0)}
+                onChange={(v) => onUpdate("depositHoldFlat", v)}
                 prefix="$"
               />
             )}

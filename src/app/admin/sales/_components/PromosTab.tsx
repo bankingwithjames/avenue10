@@ -45,12 +45,12 @@ export default function PromosTab({ listings }: PromosTabProps) {
 
   const [code, setCode] = useState("");
   const [discountType, setDiscountType] = useState("percentage");
-  const [discountValue, setDiscountValue] = useState<number>(0);
+  const [discountValue, setDiscountValue] = useState<number | null>(0);
   const [listingId, setListingId] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [minimumNights, setMinimumNights] = useState(1);
-  const [maxUses, setMaxUses] = useState(0);
+  const [minimumNights, setMinimumNights] = useState<number | null>(1);
+  const [maxUses, setMaxUses] = useState<number | null>(0);
 
   const loadPromos = useCallback(async () => {
     setLoading(true);
@@ -101,12 +101,12 @@ export default function PromosTab({ listings }: PromosTabProps) {
         body: JSON.stringify({
           code: code.trim().toUpperCase(),
           discountType,
-          discountValue,
+          discountValue: discountValue ?? 0,
           listingId: listingId || null,
           startDate: startDate || null,
           endDate: endDate || null,
-          minimumNights,
-          maxUses,
+          minimumNights: minimumNights ?? 1,
+          maxUses: maxUses ?? 0,
         }),
       });
       if (res.ok) {
@@ -183,7 +183,7 @@ export default function PromosTab({ listings }: PromosTabProps) {
               <NumberInput
                 label={discountType === "percentage" ? "Discount %" : "Discount Amount"}
                 value={discountValue}
-                onChange={(v) => setDiscountValue(v ?? 0)}
+                onChange={(v) => setDiscountValue(v)}
                 suffix={discountType === "percentage" ? "%" : undefined}
                 prefix={discountType === "fixed" ? "$" : undefined}
               />
@@ -221,12 +221,12 @@ export default function PromosTab({ listings }: PromosTabProps) {
               <NumberInput
                 label="Minimum Nights"
                 value={minimumNights}
-                onChange={(v) => setMinimumNights(v ?? 1)}
+                onChange={(v) => setMinimumNights(v)}
               />
               <NumberInput
                 label="Max Uses (0 = unlimited)"
                 value={maxUses}
-                onChange={(v) => setMaxUses(v ?? 0)}
+                onChange={(v) => setMaxUses(v)}
               />
             </div>
             <button

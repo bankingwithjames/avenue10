@@ -65,8 +65,7 @@ type Tab =
   | "comps"
   | "payouts"
   | "expenses"
-  | "forecast"
-  | "integrations";
+  | "forecast";
 
 type TimeRange = "month" | "quarter" | "year" | "all" | "custom";
 
@@ -1908,225 +1907,6 @@ function ForecastingTab() {
   );
 }
 
-// ─── Integrations Tab ──────────────────────────────────────────────────────
-
-function IntegrationsTab() {
-  const bookingPlatforms = [
-    { name: "Airbnb", color: "#FF5A5F", status: "Not Connected" as const, desc: "Sync reservations, revenue, guest data, and reviews from Airbnb", alert: "Airbnb integration coming soon — requires approved PMS/channel manager" },
-    { name: "VRBO", color: "#3B5FC0", status: "Not Connected" as const, desc: "Sync bookings, payouts, and calendar from VRBO", alert: "VRBO integration coming soon — requires approved PMS/channel manager" },
-    { name: "Booking.com", color: "#003580", status: "Not Connected" as const, desc: "Connect via Booking.com Connectivity API or channel manager", alert: "Booking.com integration coming soon — requires approved PMS/channel manager" },
-    { name: "Direct Website", color: "#2D6A4F", status: "Active" as const, desc: "Revenue from avenue10.vercel.app direct bookings", alert: "" },
-  ];
-
-  const pmsTools = [
-    { name: "Hostaway", color: "#4F46E5", desc: "All-in-one PMS with channel management, automation, and accounting" },
-    { name: "Guesty", color: "#1E3A5F", desc: "Enterprise property management and distribution platform" },
-    { name: "OwnerRez", color: "#D97706", desc: "Direct booking management with channel distribution" },
-    { name: "Hospitable", color: "#059669", desc: "Automated guest messaging and operations platform" },
-  ];
-
-  const pricingTools = [
-    { name: "PriceLabs", color: "#7C3AED", desc: "AI-powered dynamic pricing and market analytics" },
-    { name: "Beyond (formerly Beyond Pricing)", color: "#2563EB", desc: "Revenue management and dynamic pricing" },
-    { name: "Wheelhouse", color: "#0891B2", desc: "Data-driven pricing recommendations and market insights" },
-    { name: "AirDNA", color: "#DC2626", desc: "Short-term rental market data and analytics" },
-  ];
-
-  const financialTools = [
-    { name: "Stripe", color: "#635BFF", desc: "Payment processing for direct bookings" },
-    { name: "QuickBooks", color: "#2CA01C", desc: "Accounting software integration for expense tracking" },
-    { name: "Xero", color: "#13B5EA", desc: "Cloud accounting and bookkeeping integration" },
-  ];
-
-  const dataProviders = [
-    { name: "KeyData", color: "#1F2937", desc: "STR performance data and benchmarking" },
-    { name: "Transparent", color: "#6366F1", desc: "Vacation rental market intelligence" },
-  ];
-
-  const apiKeys = [
-    { label: "Airbnb API Key", placeholder: "airbnb_api_key_..." },
-    { label: "VRBO API Key", placeholder: "vrbo_api_key_..." },
-    { label: "PriceLabs API Key", placeholder: "pricelabs_api_key_..." },
-    { label: "Stripe API Key", placeholder: "sk_live_..." },
-    { label: "AirDNA API Key", placeholder: "airdna_api_key_..." },
-  ];
-
-  return (
-    <div className="space-y-8">
-      {/* Booking Platforms */}
-      <div>
-        <SectionLabel>Booking Platforms</SectionLabel>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {bookingPlatforms.map((p) => (
-            <Card key={p.name}>
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
-                <span className="text-xs text-charcoal font-medium">{p.name}</span>
-              </div>
-              <p className="text-[10px] text-warm-gray mb-3 leading-relaxed">{p.desc}</p>
-              <div className="flex items-center justify-between">
-                {p.status === "Active" ? (
-                  <Badge variant="green">Connected</Badge>
-                ) : (
-                  <Badge variant="gray">Not Connected</Badge>
-                )}
-                {p.status === "Active" ? (
-                  <button
-                    onClick={() => alert("Direct website integration is managed through your site settings.")}
-                    className="px-3 py-1.5 bg-white text-charcoal border border-light-gray text-[10px] tracking-[0.1em] uppercase font-medium hover:bg-cream transition"
-                  >
-                    Manage
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => alert(p.alert)}
-                    className="px-3 py-1.5 bg-charcoal text-white text-[10px] tracking-[0.1em] uppercase font-medium hover:bg-charcoal/90 transition"
-                  >
-                    Connect
-                  </button>
-                )}
-              </div>
-            </Card>
-          ))}
-        </div>
-      </div>
-
-      {/* PMS / Channel Manager */}
-      <div>
-        <SectionLabel>PMS / Channel Manager</SectionLabel>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {pmsTools.map((t) => (
-            <Card key={t.name}>
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
-                <span className="text-xs text-charcoal font-medium">{t.name}</span>
-              </div>
-              <p className="text-[10px] text-warm-gray mb-3 leading-relaxed">{t.desc}</p>
-              <div className="flex items-center justify-between">
-                <ComingSoonBadge />
-                <button
-                  onClick={() => alert(`${t.name} integration coming soon.`)}
-                  className="px-3 py-1.5 bg-charcoal text-white text-[10px] tracking-[0.1em] uppercase font-medium hover:bg-charcoal/90 transition"
-                >
-                  Connect
-                </button>
-              </div>
-            </Card>
-          ))}
-        </div>
-      </div>
-
-      {/* Pricing Tools */}
-      <div>
-        <SectionLabel>Pricing Tools</SectionLabel>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {pricingTools.map((t) => (
-            <Card key={t.name}>
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
-                <span className="text-xs text-charcoal font-medium">{t.name}</span>
-              </div>
-              <p className="text-[10px] text-warm-gray mb-3 leading-relaxed">{t.desc}</p>
-              <div className="flex items-center justify-between">
-                <ComingSoonBadge />
-                <button
-                  onClick={() => alert(`${t.name} integration coming soon.`)}
-                  className="px-3 py-1.5 bg-charcoal text-white text-[10px] tracking-[0.1em] uppercase font-medium hover:bg-charcoal/90 transition"
-                >
-                  Connect
-                </button>
-              </div>
-            </Card>
-          ))}
-        </div>
-      </div>
-
-      {/* Financial Tools */}
-      <div>
-        <SectionLabel>Financial Tools</SectionLabel>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {financialTools.map((t) => (
-            <Card key={t.name}>
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
-                <span className="text-xs text-charcoal font-medium">{t.name}</span>
-              </div>
-              <p className="text-[10px] text-warm-gray mb-3 leading-relaxed">{t.desc}</p>
-              <div className="flex items-center justify-between">
-                <ComingSoonBadge />
-                <button
-                  onClick={() => alert(`${t.name} integration coming soon.`)}
-                  className="px-3 py-1.5 bg-charcoal text-white text-[10px] tracking-[0.1em] uppercase font-medium hover:bg-charcoal/90 transition"
-                >
-                  Connect
-                </button>
-              </div>
-            </Card>
-          ))}
-        </div>
-      </div>
-
-      {/* Data Providers */}
-      <div>
-        <SectionLabel>Data Providers</SectionLabel>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {dataProviders.map((t) => (
-            <Card key={t.name}>
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
-                <span className="text-xs text-charcoal font-medium">{t.name}</span>
-              </div>
-              <p className="text-[10px] text-warm-gray mb-3 leading-relaxed">{t.desc}</p>
-              <div className="flex items-center justify-between">
-                <ComingSoonBadge />
-                <button
-                  onClick={() => alert(`${t.name} integration coming soon.`)}
-                  className="px-3 py-1.5 bg-charcoal text-white text-[10px] tracking-[0.1em] uppercase font-medium hover:bg-charcoal/90 transition"
-                >
-                  Connect
-                </button>
-              </div>
-            </Card>
-          ))}
-        </div>
-      </div>
-
-      {/* API Keys */}
-      <div>
-        <SectionLabel>API Keys</SectionLabel>
-        <Card>
-          <div className="space-y-4">
-            {apiKeys.map((key) => (
-              <div key={key.label} className="flex items-center gap-3">
-                <label className="text-xs text-charcoal w-36 shrink-0">{key.label}</label>
-                <input
-                  type="password"
-                  placeholder={key.placeholder}
-                  disabled
-                  className="flex-1 text-xs bg-cream border border-light-gray px-3 py-2 text-warm-gray cursor-not-allowed"
-                />
-                <button
-                  disabled
-                  className="px-3 py-1.5 bg-gray-100 text-gray-400 text-[10px] tracking-[0.1em] uppercase font-medium cursor-not-allowed"
-                >
-                  Save
-                </button>
-                <span className="text-[9px] text-warm-gray whitespace-nowrap">Coming Soon</span>
-              </div>
-            ))}
-          </div>
-          <div className="mt-4 flex items-start gap-2 bg-cream border border-light-gray px-4 py-3">
-            <Shield size={14} className="text-warm-gray mt-0.5 shrink-0" />
-            <p className="text-[10px] text-warm-gray leading-relaxed">
-              API keys are stored securely in environment variables and never exposed to the frontend.
-            </p>
-          </div>
-        </Card>
-      </div>
-    </div>
-  );
-}
-
 // ─── Main Page Component ────────────────────────────────────────────────────
 
 const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
@@ -2139,7 +1919,6 @@ const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
   { key: "payouts", label: "Payouts", icon: Wallet },
   { key: "expenses", label: "Expenses & P&L", icon: Receipt },
   { key: "forecast", label: "Forecasting", icon: TrendingUp },
-  { key: "integrations", label: "Integrations", icon: Settings },
 ];
 
 const VALID_TABS = TABS.map((t) => t.key);
@@ -2247,7 +2026,6 @@ function AdminRevenuePageInner() {
       {activeTab === "payouts" && <PayoutsTab />}
       {activeTab === "expenses" && <ExpensesPLTab />}
       {activeTab === "forecast" && <ForecastingTab />}
-      {activeTab === "integrations" && <IntegrationsTab />}
     </div>
   );
 }

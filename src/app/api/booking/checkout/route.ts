@@ -23,10 +23,7 @@ export async function POST(req: NextRequest) {
       address,
       agreedToRules,
       depositAmount,
-      earlyCheckin,
-      lateCheckout,
-      needsCrib,
-      needsHighChair,
+      selectedAddOns,
       paymentMethod,
     } = body;
 
@@ -102,22 +99,16 @@ export async function POST(req: NextRequest) {
     const notesParts: string[] = [];
 
     if (address) {
-      notesParts.push(
-        `Address: ${JSON.stringify(address)}`
-      );
+      const addrParts = [address.street, address.city, address.state, address.zip, address.country].filter(Boolean);
+      notesParts.push(`Address: ${addrParts.join(", ")}`);
     }
 
     if (specialRequests) {
       notesParts.push(`Special Requests: ${specialRequests}`);
     }
 
-    const specialRequestItems: string[] = [];
-    if (earlyCheckin) specialRequestItems.push("Early check-in requested");
-    if (lateCheckout) specialRequestItems.push("Late check-out requested");
-    if (needsCrib) specialRequestItems.push("Pack-n-play / Crib needed");
-    if (needsHighChair) specialRequestItems.push("High chair needed");
-    if (specialRequestItems.length > 0) {
-      notesParts.push(`Additional Requests: ${specialRequestItems.join(", ")}`);
+    if (selectedAddOns && Array.isArray(selectedAddOns) && selectedAddOns.length > 0) {
+      notesParts.push(`Selected Add-Ons: ${selectedAddOns.join(", ")}`);
     }
 
     if (paymentMethod) {

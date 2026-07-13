@@ -33,6 +33,13 @@ export async function GET(req: NextRequest) {
       prisma.salesConfig.findUnique({ where: { listingId } }),
     ]);
 
+    const labels = {
+      taxLabel: salesConfig?.taxLabel || "Taxes & fees",
+      serviceFeeLabel: salesConfig?.serviceFeeLabel || "Service fee",
+      depositHoldLabel: salesConfig?.depositHoldLabel || "Deposit hold",
+      extraGuestFeeType: salesConfig?.extraGuestFeeType || "per_night",
+    };
+
     return NextResponse.json({
       rule: rule
         ? {
@@ -49,11 +56,13 @@ export async function GET(req: NextRequest) {
             instantBookMaxNights: rule.instantBookMaxNights,
             autoApproveReturning: rule.autoApproveReturning,
             isActive: rule.isActive,
+            ...labels,
           }
         : {
             ...DEFAULT_RULE,
             depositHoldPercent: salesConfig?.depositHoldPercent ?? 0,
             depositHoldFlat: salesConfig?.depositHoldFlat ?? 0,
+            ...labels,
           },
     });
   } catch (error) {

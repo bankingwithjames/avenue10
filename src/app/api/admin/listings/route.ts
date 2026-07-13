@@ -12,6 +12,11 @@ export async function GET() {
       include: {
         _count: { select: { reservations: true, galleryItems: true } },
         pricingConfig: true,
+        galleryItems: {
+          take: 5,
+          orderBy: { sortOrder: "asc" },
+          include: { media: { select: { url: true, mimeType: true } } },
+        },
       },
     });
     return NextResponse.json(listings);

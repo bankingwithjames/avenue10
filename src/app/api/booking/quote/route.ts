@@ -5,7 +5,7 @@ import { calculatePricing } from "@/lib/pricing";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { listingId, checkIn, checkOut, guests, hasPets } = body;
+    const { listingId, checkIn, checkOut, guests, hasPets, selectedAddOns, promoCode } = body;
 
     if (!listingId || !checkIn || !checkOut || !guests) {
       return NextResponse.json(
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
 
     const listing = await prisma.listing.findUnique({
       where: { id: listingId },
-      include: { pricingConfig: true },
+      include: { pricingConfig: true, salesConfig: true },
     });
 
     if (!listing || !listing.active) {
@@ -44,14 +44,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (guests > listing.maxGuests) {
+    const sc = listing.salesConfig?.isActive ? listing.salesConfig : null;
+    const effectiveMaxGuests = sc ? sc.maxGuests : listing.maxGuests;
+
+    if (guests > effectiveMaxGuests) {
       return NextResponse.json(
-        { error: `Maximum ${listing.maxGuests} guests allowed` },
+        { error: `Maximum ${effectiveMaxGuests} guests allowed` },
         { status: 400 }
       );
     }
 
-    const minStay = listing.pricingConfig?.minimumStay ?? 1;
+    const minStay = sc?.minimumStay ?? listing.pricingConfig?.minimumStay ?? 1;
+    const maxStay = sc?.maximumStay ?? 365;
     const nights = Math.ceil(
       (checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24)
     );
@@ -60,6 +64,35 @@ export async function POST(req: NextRequest) {
         { error: `Minimum stay is ${minStay} night${minStay > 1 ? "s" : ""}` },
         { status: 400 }
       );
+    }
+    if (nights > maxStay) {
+      return NextResponse.json(
+        { error: `Maximum stay is ${maxStay} nights` },
+        { status: 400 }
+      );
+    }
+
+    if (sc) {
+      if (!sc.sameDayBookingAllowed) {
+        const todayStr = now.toISOString().split("T")[0];
+        const checkInStr = checkInDate.toISOString().split("T")[0];
+        if (todayStr === checkInStr) {
+          return NextResponse.json(
+            { error: "Same-day bookings are not available for this property" },
+            { status: 400 }
+          );
+        }
+      }
+
+      if (sc.advanceNoticeHours > 0) {
+        const minBookingTime = new Date(checkInDate.getTime() - sc.advanceNoticeHours * 60 * 60 * 1000);
+        if (now > minBookingTime) {
+          return NextResponse.json(
+            { error: `Bookings require at least ${sc.advanceNoticeHours} hours advance notice` },
+            { status: 400 }
+          );
+        }
+      }
     }
 
     const closedDates = await prisma.closedDate.findMany({
@@ -95,7 +128,7 @@ export async function POST(req: NextRequest) {
       checkInDate,
       checkOutDate,
       guests,
-      { hasPets }
+      { hasPets, selectedAddOns: selectedAddOns as string[] | undefined, promoCode: promoCode as string | undefined }
     );
 
     const expiresAt = new Date(now.getTime() + 30 * 60 * 1000);
@@ -117,10 +150,38 @@ export async function POST(req: NextRequest) {
         depositHold: pricing.depositHold,
         addOnsTotal: pricing.addOnsTotal,
         addOnsBreakdown: pricing.addOns.length > 0 ? (pricing.addOns as unknown as object) : undefined,
+        promoCode: pricing.promoCode ?? undefined,
+        promoDiscount: pricing.promoDiscount,
         total: pricing.total,
         expiresAt,
       },
     });
+
+    // Create BookingQuoteAddon records for selected add-ons
+    if (pricing.addOns.length > 0) {
+      const salesConfig = await prisma.salesConfig.findUnique({
+        where: { listingId },
+        include: { addOns: { where: { isActive: true } } },
+      });
+      if (salesConfig) {
+        for (const matched of pricing.addOns) {
+          const addOnItem = salesConfig.addOns.find(
+            (a) => a.name.toLowerCase() === matched.name.toLowerCase()
+          );
+          if (addOnItem) {
+            await prisma.bookingQuoteAddon.create({
+              data: {
+                quoteId: quote.id,
+                addOnItemId: addOnItem.id,
+                quantity: 1,
+                priceSnapshot: addOnItem.price,
+                totalPrice: matched.price,
+              },
+            });
+          }
+        }
+      }
+    }
 
     return NextResponse.json({ quote }, { status: 201 });
   } catch (error) {
@@ -174,4 +235,94 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({ quote });
+}
+
+export async function PUT(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { quoteId, selectedAddOns, promoCode } = body;
+
+    if (!quoteId) {
+      return NextResponse.json({ error: "quoteId is required" }, { status: 400 });
+    }
+
+    const existing = await prisma.bookingQuote.findUnique({
+      where: { id: quoteId },
+      include: { listing: true },
+    });
+
+    if (!existing || existing.status !== "active") {
+      return NextResponse.json({ error: "Quote not found or inactive" }, { status: 404 });
+    }
+
+    if (existing.expiresAt < new Date()) {
+      return NextResponse.json({ error: "Quote has expired" }, { status: 410 });
+    }
+
+    const pricing = await calculatePricing(
+      existing.listingId,
+      existing.checkIn,
+      existing.checkOut,
+      existing.guests,
+      { selectedAddOns: selectedAddOns as string[] | undefined, promoCode: promoCode as string | undefined }
+    );
+
+    // Delete old BookingQuoteAddon records
+    await prisma.bookingQuoteAddon.deleteMany({ where: { quoteId } });
+
+    // Update the quote with new pricing
+    const updated = await prisma.bookingQuote.update({
+      where: { id: quoteId },
+      data: {
+        addOnsTotal: pricing.addOnsTotal,
+        addOnsBreakdown: pricing.addOns.length > 0 ? (pricing.addOns as unknown as object) : undefined,
+        promoCode: pricing.promoCode ?? undefined,
+        promoDiscount: pricing.promoDiscount,
+        total: pricing.total,
+      },
+      include: {
+        listing: {
+          select: {
+            id: true,
+            title: true,
+            slug: true,
+            type: true,
+            photos: true,
+            maxGuests: true,
+          },
+        },
+      },
+    });
+
+    // Create new BookingQuoteAddon records
+    if (pricing.addOns.length > 0) {
+      const salesConfig = await prisma.salesConfig.findUnique({
+        where: { listingId: existing.listingId },
+        include: { addOns: { where: { isActive: true } } },
+      });
+      if (salesConfig) {
+        for (const matched of pricing.addOns) {
+          const addOnItem = salesConfig.addOns.find(
+            (a) => a.name.toLowerCase() === matched.name.toLowerCase()
+          );
+          if (addOnItem) {
+            await prisma.bookingQuoteAddon.create({
+              data: {
+                quoteId,
+                addOnItemId: addOnItem.id,
+                quantity: 1,
+                priceSnapshot: addOnItem.price,
+                totalPrice: matched.price,
+              },
+            });
+          }
+        }
+      }
+    }
+
+    return NextResponse.json({ quote: updated });
+  } catch (error) {
+    console.error("Quote update error:", error);
+    return NextResponse.json({ error: "Failed to update quote" }, { status: 500 });
+  }
 }

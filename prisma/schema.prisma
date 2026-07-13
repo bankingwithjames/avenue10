@@ -29,6 +29,7 @@ model Listing {
   cleaningFee   Float  @default(0)
   amenities   String[]
   photos      String[]
+  channelUrls Json?
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -867,6 +868,8 @@ model BookingQuote {
   depositHold      Float    @default(0)
   addOnsTotal      Float    @default(0)
   addOnsBreakdown  Json?
+  promoCode        String?
+  promoDiscount    Float    @default(0)
   total            Float
   currency         String   @default("USD")
   status           String   @default("active")
@@ -960,6 +963,7 @@ model SalesConfig {
 
   petFee            Float    @default(0)
   extraGuestFee     Float    @default(0)
+  extraGuestFeeType String   @default("per_night")
   extraGuestThreshold Int    @default(2)
 
   guestsIncluded    Int      @default(2)
@@ -1318,4 +1322,16 @@ model CrmActivityLog {
   createdAt DateTime @default(now())
 
   @@index([guestId])
+}
+
+model Integration {
+  id             String    @id @default(cuid())
+  name           String    @unique
+  category       String
+  status         String    @default("not_connected")
+  connectionUrl  String?
+  notes          String?
+  connectedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 }

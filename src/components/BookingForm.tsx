@@ -9,6 +9,9 @@ interface BookingFormProps {
   pricePerNight: number;
   cleaningFee: number;
   maxGuests: number;
+  minStay?: number;
+  maxStay?: number;
+  petFee?: number;
   closedDates: string[];
 }
 
@@ -17,11 +20,15 @@ export function BookingForm({
   pricePerNight,
   cleaningFee,
   maxGuests,
+  minStay = 1,
+  maxStay = 30,
+  petFee = 0,
 }: BookingFormProps) {
   const router = useRouter();
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
   const [guests, setGuests] = useState(1);
+  const [hasPets, setHasPets] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -36,11 +43,21 @@ export function BookingForm({
         )
       : 0;
 
-  const estimatedTotal = nights * pricePerNight + (nights > 0 ? cleaningFee : 0);
+  const estimatedNightlyTotal = nights * pricePerNight;
+  const estimatedPetFee = hasPets ? petFee : 0;
+  const estimatedTotal = estimatedNightlyTotal + (nights > 0 ? cleaningFee : 0) + estimatedPetFee;
   const today = new Date().toISOString().split("T")[0];
+
+  const stayError =
+    nights > 0 && nights < minStay
+      ? `Minimum stay is ${minStay} night${minStay > 1 ? "s" : ""}`
+      : nights > maxStay
+        ? `Maximum stay is ${maxStay} nights`
+        : "";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (stayError) return;
     setSubmitting(true);
     setError("");
 
@@ -48,7 +65,7 @@ export function BookingForm({
       const res = await fetch("/api/booking/quote", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ listingId, checkIn, checkOut, guests }),
+        body: JSON.stringify({ listingId, checkIn, checkOut, guests, hasPets }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -110,16 +127,40 @@ export function BookingForm({
         </select>
       </div>
 
-      {nights > 0 && (
+      {petFee > 0 && (
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={hasPets}
+            onChange={(e) => setHasPets(e.target.checked)}
+            className="w-4 h-4 accent-charcoal"
+          />
+          <span className="text-sm text-charcoal">
+            Bringing pets <span className="text-warm-gray">(+${petFee} fee)</span>
+          </span>
+        </label>
+      )}
+
+      {stayError && (
+        <p className="text-xs text-red-500 text-center">{stayError}</p>
+      )}
+
+      {nights > 0 && !stayError && (
         <div className="border-t border-b border-charcoal/10 py-4 text-sm space-y-2">
           <div className="flex justify-between text-charcoal/60">
             <span>${pricePerNight} &times; {nights} night{nights > 1 ? "s" : ""}</span>
-            <span>${nights * pricePerNight}</span>
+            <span>${estimatedNightlyTotal}</span>
           </div>
           {cleaningFee > 0 && (
             <div className="flex justify-between text-charcoal/60">
               <span>Cleaning fee</span>
               <span>${cleaningFee}</span>
+            </div>
+          )}
+          {estimatedPetFee > 0 && (
+            <div className="flex justify-between text-charcoal/60">
+              <span>Pet fee</span>
+              <span>${estimatedPetFee}</span>
             </div>
           )}
           <div className="flex justify-between font-medium text-charcoal pt-1">
@@ -138,7 +179,7 @@ export function BookingForm({
 
       <button
         type="submit"
-        disabled={submitting || nights === 0}
+        disabled={submitting || nights === 0 || !!stayError}
         className="w-full border border-charcoal text-charcoal text-[11px] tracking-[0.2em] uppercase py-3.5 hover:bg-charcoal hover:text-white transition-all duration-300 font-medium disabled:opacity-30 disabled:cursor-not-allowed mt-2"
       >
         {submitting ? (

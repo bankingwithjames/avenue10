@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { Suspense, useEffect, useState, useMemo, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   ChevronLeft,
   ChevronRight,
@@ -45,6 +46,12 @@ interface Reservation {
   listing: { title: string };
 }
 
+interface DailyRate {
+  date: string;
+  finalRate: number;
+  rateSource: string;
+}
+
 type DateStatus =
   | { type: "booked"; reservation: Reservation }
   | { type: "blocked"; reason: string | null; id: string }
@@ -67,9 +74,11 @@ const MONTHS = [
 ];
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-export default function AdminAvailabilityPage() {
+function AdminAvailabilityPageInner() {
+  const searchParams = useSearchParams();
+  const initialListing = searchParams.get("listing") || "";
   const [listings, setListings] = useState<Listing[]>([]);
-  const [selectedListing, setSelectedListing] = useState("");
+  const [selectedListing, setSelectedListing] = useState(initialListing);
   const [closedDates, setClosedDates] = useState<ClosedDate[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
@@ -80,13 +89,15 @@ export default function AdminAvailabilityPage() {
   const [blockEnd, setBlockEnd] = useState("");
   const [blockReason, setBlockReason] = useState("");
   const [adding, setAdding] = useState(false);
+  const [dailyRates, setDailyRates] = useState<DailyRate[]>([]);
 
   useEffect(() => {
     fetch("/api/admin/listings")
       .then((r) => r.json())
       .then((data) => {
         setListings(data);
-        if (data.length > 0) setSelectedListing(data[0].id);
+        if (data.length > 0 && !initialListing) setSelectedListing(data[0].id);
+        if (initialListing && data.some((l: Listing) => l.id === initialListing)) setSelectedListing(initialListing);
       });
   }, []);
 
@@ -98,6 +109,22 @@ export default function AdminAvailabilityPage() {
     setClosedDates(await res.json());
   }, [selectedListing]);
 
+  const loadDailyRates = useCallback(async () => {
+    if (!selectedListing) return;
+    const start = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-01`;
+    const endDay = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const end = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(endDay).padStart(2, "0")}`;
+    try {
+      const res = await fetch(`/api/admin/sales/daily-rates?listingId=${selectedListing}&start=${start}&end=${end}`);
+      if (res.ok) {
+        const data = await res.json();
+        setDailyRates(data.rates || []);
+      }
+    } catch {
+      setDailyRates([]);
+    }
+  }, [selectedListing, currentYear, currentMonth]);
+
   const loadReservations = useCallback(async () => {
     const res = await fetch("/api/admin/reservations");
     const all: Reservation[] = await res.json();
@@ -108,8 +135,9 @@ export default function AdminAvailabilityPage() {
     if (selectedListing) {
       loadClosedDates();
       loadReservations();
+      loadDailyRates();
     }
-  }, [selectedListing, loadClosedDates, loadReservations]);
+  }, [selectedListing, loadClosedDates, loadReservations, loadDailyRates]);
 
   async function blockDates() {
     if (!blockStart) return;
@@ -257,6 +285,21 @@ export default function AdminAvailabilityPage() {
 
   const selectedListingObj = listings.find((l) => l.id === selectedListing);
   const nightlyRate = selectedListingObj?.pricePerNight ?? 0;
+
+  const rateMap = useMemo(() => {
+    const map = new Map<string, DailyRate>();
+    dailyRates.forEach((r) => {
+      const key = r.date.split("T")[0];
+      map.set(key, r);
+    });
+    return map;
+  }, [dailyRates]);
+
+  function getRateForDate(day: number): number {
+    const dateStr = formatDateStr(day);
+    const dr = rateMap.get(dateStr);
+    return dr ? dr.finalRate : nightlyRate;
+  }
 
   // Monthly stats
   const totalDaysInMonth = new Date(
@@ -575,11 +618,11 @@ export default function AdminAvailabilityPage() {
                   </span>
 
                   {/* Rate */}
-                  {nightlyRate > 0 && status.type !== "past" && (
+                  {status.type !== "past" && (
                     <span
-                      className={`text-[10px] mt-0.5 ${isSelected ? "text-white/60" : "text-warm-gray/50"}`}
+                      className={`text-[10px] mt-0.5 ${isSelected ? "text-white/60" : rateMap.has(formatDateStr(day)) ? "text-charcoal/70 font-medium" : "text-warm-gray/50"}`}
                     >
-                      ${nightlyRate}
+                      ${getRateForDate(day)}
                     </span>
                   )}
 
@@ -598,9 +641,9 @@ export default function AdminAvailabilityPage() {
                   )}
 
                   {/* Available future: predicted revenue */}
-                  {status.type === "available" && nightlyRate > 0 && !isSelected && (
+                  {status.type === "available" && !isSelected && (
                     <span className="text-[9px] text-blue-400/60 mt-auto leading-tight">
-                      +${nightlyRate}
+                      +${getRateForDate(day)}
                     </span>
                   )}
                 </button>
@@ -684,13 +727,13 @@ export default function AdminAvailabilityPage() {
                         Check-in:{" "}
                         {new Date(
                           selectedDateInfo.reservation.checkIn
-                        ).toLocaleDateString()}
+                        ).toLocaleDateString("en-US", { timeZone: "UTC" })}
                       </p>
                       <p className="text-xs text-warm-gray">
                         Check-out:{" "}
                         {new Date(
                           selectedDateInfo.reservation.checkOut
-                        ).toLocaleDateString()}
+                        ).toLocaleDateString("en-US", { timeZone: "UTC" })}
                       </p>
                       <p className="text-xs text-warm-gray flex items-center gap-1">
                         <Users size={12} />{" "}
@@ -794,16 +837,30 @@ export default function AdminAvailabilityPage() {
                 {selectedDateInfo.type === "available" && (
                   <div className="space-y-3">
                     <div className="space-y-1.5">
-                      <p className="text-sm text-charcoal">
-                        Current Rate:{" "}
-                        <span className="font-medium">
-                          ${nightlyRate}/night
-                        </span>
-                      </p>
-                      <p className="text-xs text-warm-gray flex items-center gap-1">
-                        <TrendingUp size={12} /> Predicted Revenue: $
-                        {nightlyRate}
-                      </p>
+                      {(() => {
+                        const day = parseInt(selectedDate.split("-")[2]);
+                        const dateRate = getRateForDate(day);
+                        const dr = rateMap.get(selectedDate);
+                        return (
+                          <>
+                            <p className="text-sm text-charcoal">
+                              Current Rate:{" "}
+                              <span className="font-medium">
+                                ${dateRate}/night
+                              </span>
+                            </p>
+                            {dr && (
+                              <p className="text-[9px] text-warm-gray">
+                                Source: {dr.rateSource}
+                              </p>
+                            )}
+                            <p className="text-xs text-warm-gray flex items-center gap-1">
+                              <TrendingUp size={12} /> Predicted Revenue: $
+                              {dateRate}
+                            </p>
+                          </>
+                        );
+                      })()}
                     </div>
                     <button
                       onClick={() => {
@@ -831,40 +888,44 @@ export default function AdminAvailabilityPage() {
                 <h4 className="text-[10px] tracking-[0.15em] uppercase text-warm-gray font-medium mb-3">
                   Rate Info
                 </h4>
-                <div className="space-y-2.5">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-warm-gray">Current Rate</span>
-                    <span className="text-charcoal font-medium">
-                      ${nightlyRate}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-warm-gray flex items-center gap-1">
-                      Suggested Rate
-                      <Info size={10} className="text-warm-gray/50" />
-                    </span>
-                    <span className="text-emerald-600 font-medium">
-                      ${Math.round(nightlyRate * 1.1)}
-                      <span className="text-[9px] text-emerald-500 ml-1">
-                        +10%
-                      </span>
-                    </span>
-                  </div>
-                  <div>
-                    <label className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium mb-1 block">
-                      Set Rate
-                    </label>
-                    <input
-                      type="number"
-                      disabled
-                      placeholder={`$${nightlyRate}`}
-                      className="w-full border border-light-gray px-3 py-2 text-sm text-charcoal/40 bg-cream/30 cursor-not-allowed"
-                    />
-                    <p className="text-[9px] text-warm-gray/60 mt-1">
-                      Dynamic pricing coming soon
-                    </p>
-                  </div>
-                </div>
+                {(() => {
+                  const day = parseInt(selectedDate.split("-")[2]);
+                  const dateRate = getRateForDate(day);
+                  const dr = rateMap.get(selectedDate);
+                  return (
+                    <div className="space-y-2.5">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-warm-gray">Base Rate</span>
+                        <span className="text-charcoal font-medium">
+                          ${nightlyRate}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-warm-gray">Effective Rate</span>
+                        <span className={`font-medium ${dr ? "text-emerald-600" : "text-charcoal"}`}>
+                          ${dateRate}
+                          {dr && dateRate !== nightlyRate && (
+                            <span className="text-[9px] text-emerald-500 ml-1">
+                              {dateRate > nightlyRate ? "+" : ""}{Math.round(((dateRate - nightlyRate) / nightlyRate) * 100)}%
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      {dr && (
+                        <div className="flex justify-between text-xs">
+                          <span className="text-warm-gray">Source</span>
+                          <span className="text-charcoal">{dr.rateSource}</span>
+                        </div>
+                      )}
+                      <a
+                        href={`/admin/sales?listing=${selectedListing}`}
+                        className="block text-[9px] text-center text-warm-gray hover:text-charcoal border border-light-gray px-3 py-1.5 mt-2 transition"
+                      >
+                        Manage in Sales Manager
+                      </a>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Revenue forecast card */}
@@ -954,12 +1015,14 @@ export default function AdminAvailabilityPage() {
                       {new Date(r.checkIn).toLocaleDateString("en-US", {
                         month: "short",
                         day: "numeric",
+                        timeZone: "UTC",
                       })}
                     </td>
                     <td className="py-3 pr-4 text-xs text-warm-gray">
                       {new Date(r.checkOut).toLocaleDateString("en-US", {
                         month: "short",
                         day: "numeric",
+                        timeZone: "UTC",
                       })}
                     </td>
                     <td className="py-3 pr-4">
@@ -1089,5 +1152,13 @@ export default function AdminAvailabilityPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function AdminAvailabilityPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center py-20"><p className="text-warm-gray text-sm">Loading...</p></div>}>
+      <AdminAvailabilityPageInner />
+    </Suspense>
   );
 }

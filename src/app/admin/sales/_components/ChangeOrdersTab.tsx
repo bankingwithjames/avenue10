@@ -53,7 +53,7 @@ export default function ChangeOrdersTab({ listingId }: ChangeOrdersTabProps) {
   const [description, setDescription] = useState("");
   const [originalValue, setOriginalValue] = useState("");
   const [newValue, setNewValue] = useState("");
-  const [priceDiff, setPriceDiff] = useState<number>(0);
+  const [priceDiff, setPriceDiff] = useState<number | string>(0);
   const [notes, setNotes] = useState("");
   const [creating, setCreating] = useState(false);
 
@@ -209,7 +209,7 @@ export default function ChangeOrdersTab({ listingId }: ChangeOrdersTabProps) {
                     type="number"
                     className={`${inputClass} pl-7`}
                     value={priceDiff}
-                    onChange={(e) => setPriceDiff(Number(e.target.value))}
+                    onChange={(e) => setPriceDiff(e.target.value === "" ? "" : Number(e.target.value))}
                   />
                 </div>
               </div>

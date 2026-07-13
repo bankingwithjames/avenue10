@@ -91,11 +91,13 @@ export function CheckInPortal({ token, reservation }: Props) {
     weekday: "short",
     month: "short",
     day: "numeric",
+    timeZone: "UTC",
   });
   const checkOutDate = new Date(reservation.checkOut).toLocaleDateString("en-US", {
     weekday: "short",
     month: "short",
     day: "numeric",
+    timeZone: "UTC",
   });
 
   const phaseIndex = TIMELINE_STEPS.findIndex((s) => s.key === currentPhase);

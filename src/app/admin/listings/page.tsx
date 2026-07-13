@@ -9,7 +9,7 @@ import {
   ExternalLink, Copy, Archive, Trash2, Image, Wifi, Car, Home, Tv,
   Waves, Shield, Star, TrendingUp, BarChart3, Users, BedDouble, Bath,
   Clock, Settings, Link as LinkIcon, RefreshCw, Zap, Upload, ChevronUp,
-  ArrowUp, ArrowDown, ImagePlus, History
+  ArrowUp, ArrowDown, ArrowUpRight, ImagePlus, History
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -32,7 +32,9 @@ interface Listing {
   active: boolean;
   createdAt: string;
   updatedAt: string;
-  _count?: { reservations: number };
+  _count?: { reservations: number; galleryItems: number };
+  galleryItems?: { media: { url: string; mimeType: string } }[];
+  channelUrls?: Record<string, string> | null;
 }
 
 interface Media {
@@ -108,11 +110,11 @@ const AMENITY_CATEGORIES: Record<string, string[]> = {
 };
 
 const CHANNEL_LIST = [
-  { name: "Direct Website", color: "bg-emerald-500", status: "Active", desc: "Bookings from your own website are automatically tracked." },
-  { name: "Manual Booking", color: "bg-blue-500", status: "Active", desc: "Manually entered reservations and owner blocks." },
-  { name: "Airbnb", color: "bg-rose-500", status: "Coming Soon", desc: "Sync listings, calendar, and pricing with Airbnb." },
-  { name: "VRBO", color: "bg-sky-500", status: "Coming Soon", desc: "Connect your VRBO account for unified management." },
-  { name: "Booking.com", color: "bg-indigo-500", status: "Coming Soon", desc: "Manage Booking.com listings from one dashboard." },
+  { name: "Direct Website", color: "bg-emerald-500", status: "Active", desc: "Bookings from your own website are automatically tracked.", url: "https://www.avenue10.net/listings" },
+  { name: "Manual Booking", color: "bg-blue-500", status: "Active", desc: "Manually entered reservations and owner blocks.", url: "/admin/reservations" },
+  { name: "Airbnb", color: "bg-rose-500", status: "Coming Soon", desc: "Sync listings, calendar, and pricing with Airbnb.", url: "https://www.airbnb.com/hosting" },
+  { name: "VRBO", color: "bg-sky-500", status: "Coming Soon", desc: "Connect your VRBO account for unified management.", url: "https://www.vrbo.com/owner" },
+  { name: "Booking.com", color: "bg-indigo-500", status: "Coming Soon", desc: "Manage Booking.com listings from one dashboard.", url: "https://admin.booking.com" },
 ];
 
 const emptyForm = {
@@ -241,6 +243,24 @@ export default function AdminListingsPage() {
   const [showPricingHistory, setShowPricingHistory] = useState(false);
   const [pricingHistoryLoading, setPricingHistoryLoading] = useState(false);
 
+  /* --- channel urls state ------------------------------------------ */
+  const [channelUrls, setChannelUrls] = useState<Record<string, string>>({});
+  const [channelSaving, setChannelSaving] = useState(false);
+
+  /* --- integrations state ------------------------------------------ */
+  const [globalIntegrations, setGlobalIntegrations] = useState<Record<string, { status: string; connectionUrl: string | null }>>({});
+
+  /* --- availability / stay rules state ----------------------------- */
+  interface SalesConfigStayRules {
+    minimumStay: number;
+    maximumStay: number;
+    sameDayBookingAllowed: boolean;
+    advanceNoticeHours: number;
+  }
+  const [stayRules, setStayRules] = useState<SalesConfigStayRules | null>(null);
+  const [stayRulesLoading, setStayRulesLoading] = useState(false);
+  const [stayRulesSaving, setStayRulesSaving] = useState(false);
+
   /* --- load listings ---------------------------------------------- */
   const loadListings = useCallback(async () => {
     setLoading(true);
@@ -253,6 +273,15 @@ export default function AdminListingsPage() {
   }, []);
 
   useEffect(() => { loadListings(); }, [loadListings]);
+
+  useEffect(() => {
+    fetch("/api/admin/integrations").then(r => r.json()).then(data => {
+      if (!Array.isArray(data)) return;
+      const map: Record<string, { status: string; connectionUrl: string | null }> = {};
+      for (const i of data) map[i.name] = { status: i.status, connectionUrl: i.connectionUrl };
+      setGlobalIntegrations(map);
+    }).catch(() => {});
+  }, []);
 
   /* --- close more dropdown on outside click ----------------------- */
   useEffect(() => {
@@ -328,6 +357,44 @@ export default function AdminListingsPage() {
     setPricingHistoryLoading(false);
   }, []);
 
+  /* --- load / save stay rules from SalesConfig -------------------- */
+  const loadStayRules = useCallback(async (listingId: string) => {
+    setStayRulesLoading(true);
+    try {
+      const res = await fetch(`/api/admin/sales?listingId=${listingId}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data) {
+          setStayRules({
+            minimumStay: data.minimumStay ?? 1,
+            maximumStay: data.maximumStay ?? 30,
+            sameDayBookingAllowed: data.sameDayBookingAllowed ?? false,
+            advanceNoticeHours: data.advanceNoticeHours ?? 24,
+          });
+        } else {
+          setStayRules(null);
+        }
+      }
+    } catch { setStayRules(null); }
+    setStayRulesLoading(false);
+  }, []);
+
+  async function saveStayRules() {
+    if (!editingListing || !stayRules) return;
+    setStayRulesSaving(true);
+    try {
+      await fetch("/api/admin/sales", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          listingId: editingListing.id,
+          ...stayRules,
+        }),
+      });
+    } catch { /* ignore */ }
+    setStayRulesSaving(false);
+  }
+
   /* ---------------------------------------------------------------- */
   /*  Derived data                                                     */
   /* ---------------------------------------------------------------- */
@@ -338,7 +405,7 @@ export default function AdminListingsPage() {
   const avgRate = totalListings > 0 ? Math.round(listings.reduce((s, l) => s + l.pricePerNight, 0) / totalListings) : 0;
   const totalReservations = listings.reduce((s, l) => s + (l._count?.reservations ?? 0), 0);
   const needsAttention = listings.filter(l =>
-    l.photos.length === 0 || l.amenities.length === 0 || l.pricePerNight === 0
+    (l._count?.galleryItems ?? l.photos.length) === 0 || l.amenities.length === 0 || l.pricePerNight === 0
   ).length;
 
   /* --- filtered + sorted ------------------------------------------ */
@@ -388,6 +455,8 @@ export default function AdminListingsPage() {
     setPricingConfig(null);
     setShowPricingHistory(false);
     setPricingLogs([]);
+    setStayRules(null);
+    setChannelUrls({});
     setMediaLibraryOpen(false);
     setMediaSelected(new Set());
     setDrawerOpen(true);
@@ -661,6 +730,12 @@ export default function AdminListingsPage() {
       loadPricingConfig(editingListing.id);
       setShowPricingHistory(false);
     }
+    if (tab === "availability") {
+      loadStayRules(editingListing.id);
+    }
+    if (tab === "channels") {
+      setChannelUrls((editingListing.channelUrls as Record<string, string>) ?? {});
+    }
   }
 
   /* ---------------------------------------------------------------- */
@@ -825,7 +900,11 @@ export default function AdminListingsPage() {
                 <div key={item.id} className="border border-light-gray bg-white p-2 flex items-start gap-3">
                   {/* Thumbnail */}
                   <div className="w-16 h-16 bg-cream border border-light-gray overflow-hidden shrink-0">
-                    <img src={item.media.url} alt={item.label || ""} className="w-full h-full object-cover" />
+                    {item.media.mimeType?.startsWith("video/") ? (
+                      <video src={item.media.url} className="w-full h-full object-cover" muted />
+                    ) : (
+                      <img src={item.media.url} alt={item.label || ""} className="w-full h-full object-cover" />
+                    )}
                   </div>
 
                   {/* Details */}
@@ -997,7 +1076,11 @@ export default function AdminListingsPage() {
                             : "border-light-gray hover:border-charcoal/40"
                       }`}
                     >
-                      <img src={m.url} alt={m.originalName} className="w-full h-full object-cover" />
+                      {m.mimeType?.startsWith("video/") ? (
+                        <video src={m.url} className="w-full h-full object-cover" muted />
+                      ) : (
+                        <img src={m.url} alt={m.originalName} className="w-full h-full object-cover" />
+                      )}
                       {isSelected && (
                         <div className="absolute top-1 right-1 bg-charcoal text-white w-5 h-5 flex items-center justify-center">
                           <Check size={12} />
@@ -1076,10 +1159,6 @@ export default function AdminListingsPage() {
   function renderPricingTab() {
     if (!editingListing) return null;
 
-    if (pricingLoading) {
-      return <div className="text-xs text-warm-gray py-4 text-center">Loading pricing config...</div>;
-    }
-
     return (
       <div className="space-y-5">
         {/* Pricing Source Display */}
@@ -1092,9 +1171,11 @@ export default function AdminListingsPage() {
             </div>
             <div>
               <span className="text-[9px] text-warm-gray uppercase tracking-wide">Source</span>
-              <p className="text-xs text-charcoal mt-0.5">
-                {pricingConfig ? (pricingForm.dynamicPricingEnabled ? "Dynamic pricing" : "Base listing rate") : "Base listing rate"}
-              </p>
+              <p className="text-xs text-charcoal mt-0.5">Sales Manager</p>
+            </div>
+            <div>
+              <span className="text-[9px] text-warm-gray uppercase tracking-wide">Cleaning Fee</span>
+              <p className="text-xs text-charcoal mt-0.5">${pricingForm.cleaningFee || editingListing.cleaningFee || 0}</p>
             </div>
             <div>
               <span className="text-[9px] text-warm-gray uppercase tracking-wide">Dynamic Pricing</span>
@@ -1106,192 +1187,29 @@ export default function AdminListingsPage() {
                 )}
               </p>
             </div>
-            <div>
-              <span className="text-[9px] text-warm-gray uppercase tracking-wide">Final Pricing Status</span>
-              <p className="text-xs text-accent mt-0.5">Synced</p>
-            </div>
           </div>
         </div>
 
-        {/* Warning banner */}
-        <div className="flex items-start gap-2 border border-amber-200 bg-amber-50 px-3 py-2.5">
-          <AlertTriangle size={14} className="text-amber-500 shrink-0 mt-0.5" />
-          <p className="text-[10px] text-amber-700 leading-relaxed">
-            This listing uses shared pricing from Revenue &amp; Analytics. Changes here update the shared pricing system used by Calendar, Direct Booking, and Revenue reports.
+        {/* Sales Manager redirect */}
+        <div className="flex items-start gap-2 border border-blue-200 bg-blue-50 px-3 py-2.5">
+          <DollarSign size={14} className="text-blue-500 shrink-0 mt-0.5" />
+          <p className="text-[10px] text-blue-700 leading-relaxed">
+            All pricing is managed through the Sales Manager. Board rates, fees, add-ons, dynamic pricing, promos, and booking rules are configured in one place.
           </p>
         </div>
 
-        {/* Pricing fields */}
-        <div className="space-y-4">
-          <div>
-            <label className={labelClass}>Base Nightly Rate ($)</label>
-            <input
-              type="number" min={0} step={0.01}
-              value={pricingForm.baseNightlyRate}
-              onChange={e => setPricingForm({ ...pricingForm, baseNightlyRate: Number(e.target.value) })}
-              className={inputClass}
-            />
-          </div>
-          <div>
-            <label className={labelClass}>Cleaning Fee ($)</label>
-            <input
-              type="number" min={0} step={0.01}
-              value={pricingForm.cleaningFee}
-              onChange={e => setPricingForm({ ...pricingForm, cleaningFee: Number(e.target.value) })}
-              className={inputClass}
-            />
-          </div>
-          <div>
-            <label className={labelClass}>Weekend Rate ($) {pricingForm.weekendRate === null && <span className="text-warm-gray normal-case">- Not Set</span>}</label>
-            <input
-              type="number" min={0} step={0.01}
-              value={pricingForm.weekendRate ?? ""}
-              onChange={e => setPricingForm({ ...pricingForm, weekendRate: e.target.value ? Number(e.target.value) : null })}
-              placeholder="Not Set"
-              className={inputClass}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelClass}>Minimum Rate ($)</label>
-              <input
-                type="number" min={0} step={0.01}
-                value={pricingForm.minRate ?? ""}
-                onChange={e => setPricingForm({ ...pricingForm, minRate: e.target.value ? Number(e.target.value) : null })}
-                placeholder="Not Set"
-                className={inputClass}
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Maximum Rate ($)</label>
-              <input
-                type="number" min={0} step={0.01}
-                value={pricingForm.maxRate ?? ""}
-                onChange={e => setPricingForm({ ...pricingForm, maxRate: e.target.value ? Number(e.target.value) : null })}
-                placeholder="Not Set"
-                className={inputClass}
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelClass}>Pet Fee ($)</label>
-              <input
-                type="number" min={0} step={0.01}
-                value={pricingForm.petFee ?? ""}
-                onChange={e => setPricingForm({ ...pricingForm, petFee: e.target.value ? Number(e.target.value) : null })}
-                placeholder="Not Set"
-                className={inputClass}
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Extra Guest Fee ($)</label>
-              <input
-                type="number" min={0} step={0.01}
-                value={pricingForm.extraGuestFee ?? ""}
-                onChange={e => setPricingForm({ ...pricingForm, extraGuestFee: e.target.value ? Number(e.target.value) : null })}
-                placeholder="Not Set"
-                className={inputClass}
-              />
-            </div>
-          </div>
-          <div>
-            <label className={labelClass}>Security Deposit ($)</label>
-            <input
-              type="number" min={0} step={0.01}
-              value={pricingForm.securityDeposit ?? ""}
-              onChange={e => setPricingForm({ ...pricingForm, securityDeposit: e.target.value ? Number(e.target.value) : null })}
-              placeholder="Not Set"
-              className={inputClass}
-            />
-          </div>
-          <div>
-            <label className={labelClass}>Minimum Stay (nights)</label>
-            <input
-              type="number" min={1} step={1}
-              value={pricingForm.minimumStay ?? ""}
-              onChange={e => setPricingForm({ ...pricingForm, minimumStay: e.target.value ? Number(e.target.value) : null })}
-              placeholder="No minimum"
-              className={inputClass}
-            />
-          </div>
+        <a
+          href={`/admin/sales?listing=${editingListing?.id || ""}`}
+          className={`w-full ${btnPrimary} flex items-center justify-center gap-2`}
+        >
+          <DollarSign size={14} /> Open Sales Manager
+        </a>
 
-          {/* Dynamic Pricing Toggle */}
-          <label className="flex items-center gap-3 cursor-pointer py-2">
-            <input
-              type="checkbox"
-              checked={pricingForm.dynamicPricingEnabled}
-              onChange={e => setPricingForm({ ...pricingForm, dynamicPricingEnabled: e.target.checked })}
-              className="accent-charcoal"
-            />
-            <span className="text-xs text-charcoal">Enable Dynamic Pricing</span>
-          </label>
-
-          <div>
-            <label className={labelClass}>AI Pricing Provider</label>
-            <input
-              value={pricingForm.pricingProvider}
-              onChange={e => setPricingForm({ ...pricingForm, pricingProvider: e.target.value })}
-              placeholder="e.g. PriceLabs"
-              className={inputClass}
-            />
-          </div>
-        </div>
-
-        {/* Save */}
-        <button onClick={savePricing} disabled={saving} className={`w-full ${btnPrimary}`}>
-          {saving ? "Saving..." : "Save Pricing"}
-        </button>
-
-        {/* Action buttons */}
         <div className="flex flex-wrap gap-2">
-          <a href="/admin/revenue?tab=pricing" className={`${btnOutline} flex items-center gap-1.5 text-[10px]`}>
-            <DollarSign size={12} /> Open Dynamic Pricing
+          <a href={`/admin/availability?listing=${editingListing?.id || ""}`} className={`${btnOutline} flex items-center gap-1.5 text-[10px]`}>
+            <Calendar size={12} /> View Calendar
           </a>
-          <a href="/admin/availability" className={`${btnOutline} flex items-center gap-1.5 text-[10px]`}>
-            <Calendar size={12} /> View Final Rate Calendar
-          </a>
-          <button
-            onClick={() => {
-              if (!showPricingHistory) {
-                loadPricingLogs(editingListing.id);
-              }
-              setShowPricingHistory(!showPricingHistory);
-            }}
-            className={`${btnOutline} flex items-center gap-1.5 text-[10px]`}
-          >
-            <History size={12} /> {showPricingHistory ? "Hide" : "View"} Pricing History
-          </button>
         </div>
-
-        {/* Pricing History */}
-        {showPricingHistory && (
-          <div className="border border-light-gray">
-            <div className="px-3 py-2 bg-cream/50 border-b border-light-gray">
-              <p className={labelClass + " mb-0"}>Recent Pricing Changes</p>
-            </div>
-            {pricingHistoryLoading ? (
-              <div className="text-xs text-warm-gray py-4 text-center">Loading history...</div>
-            ) : pricingLogs.length === 0 ? (
-              <div className="text-xs text-warm-gray py-4 text-center">No pricing changes recorded.</div>
-            ) : (
-              <div className="divide-y divide-light-gray max-h-48 overflow-y-auto">
-                {pricingLogs.map(log => (
-                  <div key={log.id} className="px-3 py-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-charcoal font-medium">{log.changedField}</span>
-                      <span className="text-[9px] text-warm-gray">{relativeTime(log.createdAt)}</span>
-                    </div>
-                    <p className="text-[10px] text-warm-gray mt-0.5">
-                      {log.oldValue ?? "null"} &rarr; {log.newValue ?? "null"}
-                      {log.changedFromPage && <span className="ml-2 text-[8px] uppercase tracking-wider">via {log.changedFromPage}</span>}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
       </div>
     );
   }
@@ -1367,66 +1285,163 @@ export default function AdminListingsPage() {
 
         {drawerTab === "availability" && (
           <div className="space-y-4">
-            <a href="/admin/availability" className={`flex items-center gap-2 ${btnOutline} w-full justify-center`}>
+            <a href={`/admin/availability?listing=${editingListing?.id || ""}`} className={`flex items-center gap-2 ${btnOutline} w-full justify-center`}>
               <Calendar size={14} /> Open Calendar Manager
             </a>
-            {/* Show minimum stay from PricingConfig */}
-            {pricingConfig ? (
-              <div className="border border-light-gray p-4">
-                <p className={labelClass}>Minimum Stay</p>
-                <span className="text-sm text-charcoal">{pricingConfig.minimumStay ?? "No minimum"} {pricingConfig.minimumStay ? "nights" : ""}</span>
-                <p className="text-[9px] text-warm-gray mt-1">Set from Pricing tab or Revenue &amp; Analytics</p>
-              </div>
-            ) : (
-              <div className="border border-light-gray p-4">
-                <p className={labelClass}>Minimum Stay</p>
-                <button
-                  onClick={() => {
-                    if (editingListing) loadPricingConfig(editingListing.id);
-                  }}
-                  className="text-xs text-charcoal hover:underline"
-                >
-                  Load from pricing config
+
+            {stayRulesLoading ? (
+              <div className="text-xs text-warm-gray py-4 text-center">Loading stay rules...</div>
+            ) : stayRules ? (
+              <div className="space-y-4">
+                <div className="border border-light-gray p-4 bg-cream/30">
+                  <p className={labelClass}>Stay Rules</p>
+                  <p className="text-[9px] text-warm-gray mt-0.5 mb-3">Per-listing rules synced with Sales Manager</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelClass}>Minimum Stay (nights)</label>
+                      <input
+                        type="number" min={1} step={1}
+                        value={stayRules.minimumStay}
+                        onChange={e => setStayRules({ ...stayRules, minimumStay: Number(e.target.value) || 1 })}
+                        className={inputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Maximum Stay (nights)</label>
+                      <input
+                        type="number" min={1} step={1}
+                        value={stayRules.maximumStay}
+                        onChange={e => setStayRules({ ...stayRules, maximumStay: Number(e.target.value) || 30 })}
+                        className={inputClass}
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-3">
+                    <label className={labelClass}>Advance Notice (hours)</label>
+                    <input
+                      type="number" min={0} step={1}
+                      value={stayRules.advanceNoticeHours}
+                      onChange={e => setStayRules({ ...stayRules, advanceNoticeHours: Number(e.target.value) || 0 })}
+                      className={inputClass}
+                    />
+                  </div>
+                  <label className="flex items-center gap-3 cursor-pointer py-3 mt-2">
+                    <div
+                      onClick={() => setStayRules({ ...stayRules, sameDayBookingAllowed: !stayRules.sameDayBookingAllowed })}
+                      className={`w-9 h-5 rounded-full relative cursor-pointer transition-colors ${stayRules.sameDayBookingAllowed ? "bg-charcoal" : "bg-stone-300"}`}
+                    >
+                      <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${stayRules.sameDayBookingAllowed ? "translate-x-4" : "translate-x-0.5"}`} />
+                    </div>
+                    <div>
+                      <span className="text-xs text-charcoal">Allow Same-Day Booking</span>
+                      <p className="text-[9px] text-warm-gray">Guests can book for today if advance notice window has passed</p>
+                    </div>
+                  </label>
+                </div>
+                <button onClick={saveStayRules} disabled={stayRulesSaving} className={`w-full ${btnPrimary}`}>
+                  {stayRulesSaving ? "Saving..." : "Save Stay Rules"}
                 </button>
               </div>
+            ) : (
+              <div className="border border-light-gray p-4 text-center">
+                <p className="text-xs text-warm-gray mb-2">No Sales Config found for this listing.</p>
+                <a href={`/admin/sales?listing=${editingListing?.id || ""}`} className={`${btnPrimary} inline-flex items-center gap-2`}>
+                  <DollarSign size={12} /> Set Up in Sales Manager
+                </a>
+              </div>
             )}
-            <div className="border-t border-light-gray pt-4 space-y-3">
-              {["Maximum Stay", "Same-Day Booking", "Advance Notice"].map(label => (
-                <div key={label} className="flex items-center gap-2">
-                  <div className="flex-1">
-                    <label className={labelClass}>{label}</label>
-                    <input disabled placeholder="--" className={`${inputClass} opacity-50 cursor-not-allowed`} />
-                  </div>
-                  <div className="pt-4"><ComingSoonBadge /></div>
-                </div>
-              ))}
-            </div>
+
             <p className="text-[9px] tracking-[0.1em] uppercase text-warm-gray">Manage blocked dates and calendar in the Calendar tab</p>
           </div>
         )}
 
         {drawerTab === "channels" && (
           <div className="space-y-3">
-            {CHANNEL_LIST.map(ch => (
-              <div key={ch.name} className="border border-light-gray p-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <div className={`w-2 h-2 rounded-full ${ch.color}`} />
-                  <span className="text-sm font-medium text-charcoal">{ch.name}</span>
-                  <span className={`ml-auto text-[8px] tracking-[0.12em] uppercase font-medium px-1.5 py-0.5 ${
-                    ch.status === "Active" ? "bg-emerald-50 text-accent border border-emerald-200" : "bg-amber-50 text-amber-600 border border-amber-200"
-                  }`}>
-                    {ch.status}
-                  </span>
+            {CHANNEL_LIST.map(ch => {
+              const key = ch.name.toLowerCase().replace(/[^a-z]/g, "");
+              const savedUrl = channelUrls[key] || "";
+              const isInternal = ch.status === "Active";
+              const globalInt = globalIntegrations[ch.name];
+              const isGlobalConnected = globalInt?.status === "connected";
+              const globalUrl = globalInt?.connectionUrl || "";
+              const displayUrl = savedUrl || globalUrl || ch.url;
+              const isLinked = isInternal || savedUrl || isGlobalConnected;
+
+              let statusLabel = "Not Linked";
+              let statusClass = "bg-amber-50 text-amber-600 border border-amber-200";
+              if (isInternal) {
+                statusLabel = "Active";
+                statusClass = "bg-emerald-50 text-accent border border-emerald-200";
+              } else if (savedUrl) {
+                statusLabel = "Linked";
+                statusClass = "bg-emerald-50 text-accent border border-emerald-200";
+              } else if (isGlobalConnected) {
+                statusLabel = "Connected";
+                statusClass = "bg-blue-50 text-blue-600 border border-blue-200";
+              }
+
+              return (
+                <div key={ch.name} className="border border-light-gray p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className={`w-2 h-2 rounded-full ${ch.color}`} />
+                    <span className="text-sm font-medium text-charcoal">{ch.name}</span>
+                    <span className={`ml-auto text-[8px] tracking-[0.12em] uppercase font-medium px-1.5 py-0.5 ${statusClass}`}>
+                      {statusLabel}
+                    </span>
+                  </div>
+                  <p className="text-xs text-warm-gray mb-2">{ch.desc}</p>
+                  {!isInternal && (
+                    <div className="mb-2">
+                      <input
+                        value={savedUrl}
+                        onChange={e => setChannelUrls(prev => ({ ...prev, [key]: e.target.value }))}
+                        placeholder={isGlobalConnected && !savedUrl ? `Connected via Integrations — add listing-specific URL` : `Paste your ${ch.name} listing URL`}
+                        className={inputClass}
+                      />
+                      {isGlobalConnected && !savedUrl && globalUrl && (
+                        <p className="text-[10px] text-blue-500 mt-1">
+                          Using integration URL: {globalUrl.replace(/^https?:\/\//, "").substring(0, 50)}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  <a
+                    href={displayUrl}
+                    target={displayUrl.startsWith("/") ? "_self" : "_blank"}
+                    rel={displayUrl.startsWith("/") ? undefined : "noopener noreferrer"}
+                    className={`inline-flex items-center gap-1.5 ${isLinked ? "text-accent border-emerald-200" : "text-warm-gray border-light-gray hover:text-charcoal hover:border-charcoal/30"} border text-[9px] tracking-[0.12em] uppercase font-medium px-3 py-1.5 transition-colors`}
+                  >
+                    {isLinked ? "Open" : "Visit"} {ch.name} <ArrowUpRight size={10} />
+                  </a>
                 </div>
-                <p className="text-xs text-warm-gray mb-2">{ch.desc}</p>
-                <button
-                  onClick={() => { if (ch.status === "Coming Soon") alert(`${ch.name} integration coming soon!`); }}
-                  className={`${ch.status === "Active" ? "text-accent border-emerald-200" : "text-warm-gray border-light-gray"} border text-[9px] tracking-[0.12em] uppercase font-medium px-3 py-1.5`}
-                >
-                  {ch.status === "Active" ? "Connected" : "Connect"}
-                </button>
-              </div>
-            ))}
+              );
+            })}
+            <button
+              onClick={async () => {
+                if (!editingListing) return;
+                setChannelSaving(true);
+                try {
+                  await fetch(`/api/admin/listings/${editingListing.id}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ channelUrls }),
+                  });
+                  setListings(prev => prev.map(l => l.id === editingListing.id ? { ...l, channelUrls } : l));
+                  setEditingListing({ ...editingListing, channelUrls });
+                } catch { /* ignore */ }
+                setChannelSaving(false);
+              }}
+              disabled={channelSaving}
+              className={`w-full ${btnPrimary}`}
+            >
+              {channelSaving ? "Saving..." : "Save Channel Links"}
+            </button>
+            <a
+              href="/admin/integrations"
+              className="block text-center text-[10px] tracking-[0.12em] uppercase text-warm-gray hover:text-charcoal transition-colors mt-1"
+            >
+              Manage Integrations →
+            </a>
           </div>
         )}
 
@@ -1514,20 +1529,20 @@ export default function AdminListingsPage() {
       {/* ============================================================ */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
         {[
-          { label: "Total Listings", value: totalListings, icon: Home },
-          { label: "Active", value: activeListings, icon: Check, color: "text-accent" },
-          { label: "Inactive", value: inactiveListings, icon: Clock, color: "text-warm-gray" },
-          { label: "Avg Nightly Rate", value: `$${avgRate}`, icon: DollarSign },
-          { label: "Total Reservations", value: totalReservations, icon: Calendar },
-          { label: "Needs Attention", value: needsAttention, icon: AlertTriangle, color: needsAttention > 0 ? "text-amber-500" : "text-warm-gray" },
+          { label: "Total Listings", value: totalListings, icon: Home, href: "/admin/listings" },
+          { label: "Active", value: activeListings, icon: Check, color: "text-accent", href: "/admin/listings" },
+          { label: "Inactive", value: inactiveListings, icon: Clock, color: "text-warm-gray", href: "/admin/listings" },
+          { label: "Avg Nightly Rate", value: `$${avgRate}`, icon: DollarSign, href: "/admin/sales" },
+          { label: "Total Reservations", value: totalReservations, icon: Calendar, href: "/admin/reservations" },
+          { label: "Needs Attention", value: needsAttention, icon: AlertTriangle, color: needsAttention > 0 ? "text-amber-500" : "text-warm-gray", href: "/admin/listings" },
         ].map(card => (
-          <div key={card.label} className="bg-white border border-light-gray p-4">
+          <a key={card.label} href={card.href} className="bg-white border border-light-gray p-4 hover:border-charcoal/30 hover:shadow-sm transition-all cursor-pointer block">
             <div className="flex items-center gap-2 mb-2">
               <card.icon size={14} className="text-warm-gray" />
               <span className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">{card.label}</span>
             </div>
             <span className={`text-xl font-serif ${card.color ?? "text-charcoal"}`}>{card.value}</span>
-          </div>
+          </a>
         ))}
       </div>
 
@@ -1620,11 +1635,17 @@ export default function AdminListingsPage() {
                   className="accent-charcoal mt-1"
                 />
                 <div className="w-20 h-20 bg-cream border border-light-gray flex items-center justify-center overflow-hidden shrink-0">
-                  {listing.photos.length > 0 ? (
-                    <img src={listing.photos[0]} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <Camera size={20} className="text-warm-gray" />
-                  )}
+                  {(() => {
+                    const imageItem = listing.galleryItems?.find(g => !g.media.mimeType?.startsWith("video/"));
+                    const coverUrl = imageItem?.media.url ?? null;
+                    const photoUrl = listing.photos.length > 0 ? listing.photos[0] : null;
+                    const src = coverUrl || photoUrl;
+                    return src ? (
+                      <img src={src} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <Camera size={20} className="text-warm-gray" />
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -1689,9 +1710,12 @@ export default function AdminListingsPage() {
                   <span className="text-[9px] tracking-[0.1em] uppercase font-medium bg-cream px-2 py-0.5 text-charcoal">
                     {listing.amenities.length} amenities
                   </span>
-                  <span className="text-[9px] tracking-[0.1em] uppercase font-medium bg-cream px-2 py-0.5 text-charcoal flex items-center gap-1">
-                    <Image size={10} /> {listing.photos.length} photos
-                  </span>
+                  <button
+                    onClick={() => { openEditDrawer(listing); setTimeout(() => handleTabChange("photos"), 100); }}
+                    className="text-[9px] tracking-[0.1em] uppercase font-medium bg-cream px-2 py-0.5 text-charcoal flex items-center gap-1 hover:bg-light-gray transition-colors cursor-pointer"
+                  >
+                    <Image size={10} /> {listing._count?.galleryItems ?? listing.photos.length} photos
+                  </button>
                   <span className={`text-[9px] tracking-[0.1em] uppercase font-medium px-2 py-0.5 ${
                     listing.active ? "bg-emerald-50 text-accent" : "bg-stone-100 text-warm-gray"
                   }`}>
@@ -1701,12 +1725,29 @@ export default function AdminListingsPage() {
 
                 {/* Channel badges */}
                 <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                  <span className="text-[8px] tracking-[0.1em] uppercase font-medium bg-emerald-50 text-accent border border-emerald-200 px-1.5 py-0.5">Direct</span>
-                  {["Airbnb", "VRBO", "Booking.com"].map(ch => (
-                    <span key={ch} className="text-[8px] tracking-[0.1em] uppercase font-medium bg-stone-50 text-warm-gray border border-light-gray px-1.5 py-0.5 flex items-center gap-1">
-                      {ch} <span className="text-[7px] opacity-60">Soon</span>
-                    </span>
-                  ))}
+                  <a href={`/listings/${listing.slug}`} target="_blank" rel="noopener noreferrer" className="text-[8px] tracking-[0.1em] uppercase font-medium bg-emerald-50 text-accent border border-emerald-200 px-1.5 py-0.5 hover:bg-emerald-100 transition-colors cursor-pointer">Direct</a>
+                  {CHANNEL_LIST.filter(ch => ch.status !== "Active").map(ch => {
+                    const key = ch.name.toLowerCase().replace(/[^a-z]/g, "");
+                    const listingUrl = (listing.channelUrls as Record<string, string> | null)?.[key];
+                    const globalInt = globalIntegrations[ch.name];
+                    const isConnected = !!listingUrl || globalInt?.status === "connected";
+                    const linkUrl = listingUrl || globalInt?.connectionUrl || ch.url;
+                    return (
+                      <a
+                        key={ch.name}
+                        href={linkUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`text-[8px] tracking-[0.1em] uppercase font-medium px-1.5 py-0.5 flex items-center gap-1 transition-colors cursor-pointer ${
+                          isConnected
+                            ? "bg-emerald-50 text-accent border border-emerald-200 hover:bg-emerald-100"
+                            : "bg-stone-50 text-warm-gray border border-light-gray hover:bg-stone-100"
+                        }`}
+                      >
+                        {ch.name} {!isConnected && <span className="text-[7px] opacity-60">Soon</span>}
+                      </a>
+                    );
+                  })}
                 </div>
 
                 {/* Last updated */}
@@ -1720,10 +1761,10 @@ export default function AdminListingsPage() {
                 <button onClick={() => openEditDrawer(listing)} className={`${btnOutline} flex items-center gap-1.5 text-[10px]`}>
                   <Pencil size={12} /> Edit
                 </button>
-                <a href="/admin/availability" className={`${btnOutline} flex items-center gap-1.5 text-[10px]`}>
+                <a href={`/admin/availability?listing=${listing.id}`} className={`${btnOutline} flex items-center gap-1.5 text-[10px]`}>
                   <Calendar size={12} /> Calendar
                 </a>
-                <a href="/admin/revenue?tab=pricing" className={`${btnOutline} flex items-center gap-1.5 text-[10px]`}>
+                <a href={`/admin/sales?listing=${listing.id}`} className={`${btnOutline} flex items-center gap-1.5 text-[10px]`}>
                   <DollarSign size={12} /> Pricing
                 </a>
                 <a href={`/listings/${listing.slug}`} target="_blank" rel="noopener noreferrer" className={`${btnOutline} flex items-center gap-1.5 text-[10px]`}>

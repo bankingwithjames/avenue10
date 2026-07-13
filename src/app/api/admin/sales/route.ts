@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/adminAuth";
 import { prisma } from "@/lib/prisma";
+import { generateDynamicRates } from "@/lib/dynamic-pricing";
 
 export async function GET(req: NextRequest) {
   const { error } = await requireAdmin();
@@ -96,6 +97,8 @@ export async function POST(req: NextRequest) {
         listing: { select: { title: true } },
       },
     });
+
+    await generateDynamicRates(listingId);
 
     return NextResponse.json(result);
   } catch (err) {

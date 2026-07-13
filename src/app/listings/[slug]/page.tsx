@@ -18,7 +18,7 @@ export default async function ListingDetailPage({
   const [listing, pageMedia, content] = await Promise.all([
     prisma.listing.findUnique({
       where: { slug },
-      include: { closedDates: true },
+      include: { closedDates: true, salesConfig: true },
     }),
     getPageMedia(),
     getSiteContent(),
@@ -27,6 +27,13 @@ export default async function ListingDetailPage({
   if (!listing) notFound();
 
   const closedDates = listing.closedDates.map((d: { date: Date }) => d.date.toISOString());
+  const sc = listing.salesConfig?.isActive ? listing.salesConfig : null;
+  const effectiveRate = sc ? sc.boardRate : listing.pricePerNight;
+  const effectiveCleaningFee = sc ? sc.cleaningFee : listing.cleaningFee;
+  const effectiveMaxGuests = sc ? sc.maxGuests : listing.maxGuests;
+  const effectiveMinStay = sc ? sc.minimumStay : 1;
+  const effectiveMaxStay = sc ? sc.maximumStay : 30;
+  const petFee = sc ? sc.petFee : 0;
   const heroSrc = pageMedia[`${listing.slug}-hero`] || "/media/exterior/frontview-light.mp4";
   const isVideo = heroSrc.endsWith(".mp4") || heroSrc.endsWith(".webm");
 
@@ -118,20 +125,28 @@ export default async function ListingDetailPage({
               <div className="bg-cream p-8 sticky top-24">
                 <div className="mb-8">
                   <span className="font-serif text-3xl text-charcoal">
-                    ${listing.pricePerNight}
+                    ${effectiveRate}
                   </span>
                   <span className="text-warm-gray text-sm"> / night</span>
-                  {listing.cleaningFee > 0 && (
+                  {effectiveCleaningFee > 0 && (
                     <p className="text-xs text-warm-gray mt-1">
-                      + ${listing.cleaningFee} cleaning fee
+                      + ${effectiveCleaningFee} cleaning fee
+                    </p>
+                  )}
+                  {effectiveMinStay > 1 && (
+                    <p className="text-xs text-warm-gray mt-0.5">
+                      {effectiveMinStay} night minimum
                     </p>
                   )}
                 </div>
                 <BookingForm
                   listingId={listing.id}
-                  pricePerNight={listing.pricePerNight}
-                  cleaningFee={listing.cleaningFee}
-                  maxGuests={listing.maxGuests}
+                  pricePerNight={effectiveRate}
+                  cleaningFee={effectiveCleaningFee}
+                  maxGuests={effectiveMaxGuests}
+                  minStay={effectiveMinStay}
+                  maxStay={effectiveMaxStay}
+                  petFee={petFee}
                   closedDates={closedDates}
                 />
               </div>

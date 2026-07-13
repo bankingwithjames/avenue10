@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { Suspense, useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   DollarSign,
   Check,
@@ -44,8 +45,12 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]["id"];
 
-export default function SalesManagerPage() {
-  const [selectedListing, setSelectedListing] = useState(LISTINGS[0].id);
+function SalesManagerPageInner() {
+  const searchParams = useSearchParams();
+  const initialListing = searchParams.get("listing");
+  const [selectedListing, setSelectedListing] = useState(
+    initialListing && LISTINGS.some(l => l.id === initialListing) ? initialListing : LISTINGS[0].id
+  );
   const [activeTab, setActiveTab] = useState<TabId>("pricing");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -92,6 +97,7 @@ export default function SalesManagerPage() {
             cleaningFee: data.cleaningFee,
             petFee: data.petFee,
             extraGuestFee: data.extraGuestFee,
+            extraGuestFeeType: data.extraGuestFeeType ?? "per_night",
             extraGuestThreshold: data.extraGuestThreshold,
             guestsIncluded: data.guestsIncluded ?? 2,
             maxGuests: data.maxGuests ?? 10,
@@ -191,29 +197,30 @@ export default function SalesManagerPage() {
     try {
       const body = {
         listingId: selectedListing,
-        boardRate: pricingForm.boardRate,
+        boardRate: pricingForm.boardRate ?? 0,
         weekendRate: pricingForm.weekendRate,
-        cleaningFee: pricingForm.cleaningFee,
-        petFee: pricingForm.petFee,
-        extraGuestFee: pricingForm.extraGuestFee,
-        extraGuestThreshold: pricingForm.extraGuestThreshold,
-        guestsIncluded: pricingForm.guestsIncluded,
-        maxGuests: pricingForm.maxGuests,
-        minimumStay: pricingForm.minimumStay,
-        maximumStay: pricingForm.maximumStay,
+        cleaningFee: pricingForm.cleaningFee ?? 0,
+        petFee: pricingForm.petFee ?? 0,
+        extraGuestFee: pricingForm.extraGuestFee ?? 0,
+        extraGuestFeeType: pricingForm.extraGuestFeeType,
+        extraGuestThreshold: pricingForm.extraGuestThreshold ?? 2,
+        guestsIncluded: pricingForm.guestsIncluded ?? 2,
+        maxGuests: pricingForm.maxGuests ?? 10,
+        minimumStay: pricingForm.minimumStay ?? 1,
+        maximumStay: pricingForm.maximumStay ?? 30,
         sameDayBookingAllowed: pricingForm.sameDayBookingAllowed,
-        advanceNoticeHours: pricingForm.advanceNoticeHours,
-        taxRate: pricingForm.taxRate,
+        advanceNoticeHours: pricingForm.advanceNoticeHours ?? 24,
+        taxRate: pricingForm.taxRate ?? 0,
         taxLabel: pricingForm.taxLabel,
         serviceFeePercent:
-          serviceFeeType === "percent" ? pricingForm.serviceFeePercent : 0,
+          serviceFeeType === "percent" ? (pricingForm.serviceFeePercent ?? 0) : 0,
         serviceFeeFlat:
-          serviceFeeType === "flat" ? pricingForm.serviceFeeFlat : 0,
+          serviceFeeType === "flat" ? (pricingForm.serviceFeeFlat ?? 0) : 0,
         serviceFeeLabel: pricingForm.serviceFeeLabel,
         depositHoldPercent:
-          depositType === "percent" ? pricingForm.depositHoldPercent : 0,
+          depositType === "percent" ? (pricingForm.depositHoldPercent ?? 0) : 0,
         depositHoldFlat:
-          depositType === "flat" ? pricingForm.depositHoldFlat : 0,
+          depositType === "flat" ? (pricingForm.depositHoldFlat ?? 0) : 0,
         depositHoldLabel: pricingForm.depositHoldLabel,
         addOns,
       };
@@ -235,17 +242,35 @@ export default function SalesManagerPage() {
   };
 
   // Save dynamic pricing settings
+  const [dynamicSaveResult, setDynamicSaveResult] = useState<string | null>(null);
   const handleSaveDynamic = async () => {
     setSavingDynamic(true);
+    setDynamicSaveResult(null);
     try {
-      await fetch("/api/admin/sales/dynamic-pricing", {
+      const res = await fetch("/api/admin/sales/dynamic-pricing", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           listingId: selectedListing,
           ...dynamicPricing,
+          minimumRate: dynamicPricing.minimumRate ?? 0,
+          maximumRate: dynamicPricing.maximumRate ?? 0,
+          weekendPremiumPercent: dynamicPricing.weekendPremiumPercent ?? 0,
+          eventPremiumPercent: dynamicPricing.eventPremiumPercent ?? 0,
+          gapNightDiscountPercent: dynamicPricing.gapNightDiscountPercent ?? 0,
+          lastMinuteDiscountPercent: dynamicPricing.lastMinuteDiscountPercent ?? 0,
+          farOutPremiumPercent: dynamicPricing.farOutPremiumPercent ?? 0,
         }),
       });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ratesGenerated !== undefined) {
+          setDynamicSaveResult(`Settings saved — ${data.ratesGenerated} daily rates generated`);
+        } else {
+          setDynamicSaveResult("Settings saved");
+        }
+        setTimeout(() => setDynamicSaveResult(null), 5000);
+      }
     } catch {
       // fail silently
     }
@@ -342,6 +367,7 @@ export default function SalesManagerPage() {
                 onUpdateDynamic={updateDynamic}
                 onSaveDynamic={handleSaveDynamic}
                 savingDynamic={savingDynamic}
+                saveResult={dynamicSaveResult}
               />
             )}
 
@@ -393,5 +419,13 @@ export default function SalesManagerPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function SalesManagerPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center py-20"><p className="text-warm-gray text-sm">Loading...</p></div>}>
+      <SalesManagerPageInner />
+    </Suspense>
   );
 }

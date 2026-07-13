@@ -28,6 +28,8 @@ interface Quote {
   depositHold: number;
   addOnsTotal: number;
   addOnsBreakdown: { name: string; price: number }[] | null;
+  promoCode: string | null;
+  promoDiscount: number;
   total: number;
   expiresAt: string;
   listing: {
@@ -46,6 +48,20 @@ interface BookingRule {
   depositPercent: number;
   depositFlat: number;
   requireAgreement: boolean;
+  taxLabel?: string;
+  serviceFeeLabel?: string;
+  depositHoldLabel?: string;
+  extraGuestFeeType?: string;
+}
+
+interface AddOn {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  category: string;
+  pricingType: string;
+  requiresAdminApproval: boolean;
 }
 
 interface CheckoutData {
@@ -59,10 +75,7 @@ interface CheckoutData {
   zip: string;
   country: string;
   specialRequests: string;
-  earlyCheckin: boolean;
-  lateCheckout: boolean;
-  needsCrib: boolean;
-  needsHighChair: boolean;
+  selectedAddOns: string[];
   agreedToRules: boolean;
   paymentMethod: string;
 }
@@ -115,7 +128,12 @@ export function CheckoutForm({ quoteId }: { quoteId: string }) {
 
   const [quote, setQuote] = useState<Quote | null>(null);
   const [rule, setRule] = useState<BookingRule | null>(null);
+  const [availableAddOns, setAvailableAddOns] = useState<AddOn[]>([]);
   const [loading, setLoading] = useState(true);
+  const [updatingAddOns, setUpdatingAddOns] = useState(false);
+  const [promoInput, setPromoInput] = useState("");
+  const [applyingPromo, setApplyingPromo] = useState(false);
+  const [promoError, setPromoError] = useState("");
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -130,10 +148,7 @@ export function CheckoutForm({ quoteId }: { quoteId: string }) {
     zip: "",
     country: "United States",
     specialRequests: "",
-    earlyCheckin: false,
-    lateCheckout: false,
-    needsCrib: false,
-    needsHighChair: false,
+    selectedAddOns: [],
     agreedToRules: false,
     paymentMethod: "card",
   });
@@ -167,6 +182,90 @@ export function CheckoutForm({ quoteId }: { quoteId: string }) {
     [quoteId]
   );
 
+  async function toggleAddOn(addOnName: string) {
+    if (!quote) return;
+    const current = form.selectedAddOns;
+    const next = current.includes(addOnName)
+      ? current.filter((n) => n !== addOnName)
+      : [...current, addOnName];
+    updateForm({ selectedAddOns: next });
+
+    setUpdatingAddOns(true);
+    try {
+      const res = await fetch("/api/booking/quote", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          quoteId: quote.id,
+          selectedAddOns: next,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.quote) {
+        setQuote(data.quote);
+      }
+    } catch {
+      // keep current quote on error
+    } finally {
+      setUpdatingAddOns(false);
+    }
+  }
+
+  async function applyPromoCode() {
+    if (!quote || !promoInput.trim()) return;
+    setApplyingPromo(true);
+    setPromoError("");
+    try {
+      const res = await fetch("/api/booking/quote", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          quoteId: quote.id,
+          selectedAddOns: form.selectedAddOns,
+          promoCode: promoInput.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.quote) {
+        setQuote(data.quote);
+        if (!data.quote.promoCode) {
+          setPromoError("Invalid or expired promo code");
+        }
+      } else {
+        setPromoError(data.error || "Failed to apply promo code");
+      }
+    } catch {
+      setPromoError("Network error");
+    } finally {
+      setApplyingPromo(false);
+    }
+  }
+
+  async function removePromoCode() {
+    if (!quote) return;
+    setApplyingPromo(true);
+    try {
+      const res = await fetch("/api/booking/quote", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          quoteId: quote.id,
+          selectedAddOns: form.selectedAddOns,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.quote) {
+        setQuote(data.quote);
+        setPromoInput("");
+        setPromoError("");
+      }
+    } catch {
+      // keep current state
+    } finally {
+      setApplyingPromo(false);
+    }
+  }
+
   useEffect(() => {
     async function loadData() {
       try {
@@ -178,13 +277,18 @@ export function CheckoutForm({ quoteId }: { quoteId: string }) {
         }
         setQuote(data.quote);
 
-        // Load booking rules
-        const rulesRes = await fetch(
-          `/api/booking/rules?listingId=${data.quote.listing.id}`
-        );
+        // Load booking rules and available add-ons in parallel
+        const [rulesRes, addOnsRes] = await Promise.all([
+          fetch(`/api/booking/rules?listingId=${data.quote.listing.id}`),
+          fetch(`/api/booking/addons?listingId=${data.quote.listing.id}`),
+        ]);
         const rulesData = await rulesRes.json();
         if (rulesRes.ok) {
           setRule(rulesData.rule);
+        }
+        const addOnsData = await addOnsRes.json();
+        if (addOnsRes.ok && addOnsData.addOns) {
+          setAvailableAddOns(addOnsData.addOns);
         }
       } catch {
         setError("Failed to load booking details");
@@ -525,17 +629,118 @@ export function CheckoutForm({ quoteId }: { quoteId: string }) {
               )}
             </div>
 
-            {/* Section 4: Special Requests */}
+            {/* Section 4: Add-Ons & Special Requests */}
             <div className="bg-white border border-light-gray p-8">
               <div className="flex items-center gap-3 mb-6">
                 <span className="flex items-center justify-center w-7 h-7 border border-charcoal text-charcoal text-[10px] font-medium">
                   4
                 </span>
-                <p className={sectionHeaderClass}>Special Requests</p>
+                <p className={sectionHeaderClass}>
+                  {availableAddOns.length > 0 ? "Add-Ons & Special Requests" : "Special Requests"}
+                </p>
               </div>
 
               <div className="space-y-5">
-                <div>
+                {availableAddOns.length > 0 && (
+                  <div className="space-y-3">
+                    {updatingAddOns && (
+                      <div className="flex items-center gap-2 text-[10px] text-warm-gray mb-2">
+                        <Loader2 size={12} className="animate-spin" />
+                        <span>Updating pricing...</span>
+                      </div>
+                    )}
+                    {availableAddOns.map((addon) => {
+                      const isSelected = form.selectedAddOns.includes(addon.name);
+                      const priceLabel =
+                        addon.pricingType === "per_night"
+                          ? `$${addon.price.toFixed(0)}/night`
+                          : addon.pricingType === "per_guest"
+                            ? `$${addon.price.toFixed(0)}/guest`
+                            : addon.pricingType === "percentage"
+                              ? `${addon.price}%`
+                              : addon.price > 0
+                                ? `$${addon.price.toFixed(0)}`
+                                : "Custom pricing";
+                      return (
+                        <label
+                          key={addon.id}
+                          className={`flex items-start gap-3 cursor-pointer p-4 border transition-colors ${
+                            isSelected
+                              ? "border-charcoal/30 bg-cream/50"
+                              : "border-light-gray hover:border-charcoal/20"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleAddOn(addon.name)}
+                            disabled={updatingAddOns}
+                            className="mt-0.5 w-4 h-4 accent-charcoal shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-sm text-charcoal font-medium">
+                                {addon.name}
+                              </span>
+                              <span className="text-xs text-warm-gray shrink-0">
+                                {priceLabel}
+                              </span>
+                            </div>
+                            {addon.description && (
+                              <p className="text-[11px] text-warm-gray mt-0.5 leading-relaxed">
+                                {addon.description}
+                              </p>
+                            )}
+                            {addon.requiresAdminApproval && (
+                              <p className="text-[9px] tracking-[0.1em] uppercase text-accent mt-1">
+                                Subject to availability
+                              </p>
+                            )}
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div className={availableAddOns.length > 0 ? "border-t border-light-gray pt-5" : ""}>
+                  <label className={labelClass}>Promo Code</label>
+                  {quote.promoCode ? (
+                    <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 text-sm">
+                      <span className="text-green-700 font-medium">{quote.promoCode}</span>
+                      <span className="text-green-600 text-xs">applied &ndash; saving ${quote.promoDiscount.toFixed(2)}</span>
+                      <button
+                        type="button"
+                        onClick={removePromoCode}
+                        disabled={applyingPromo}
+                        className="ml-auto text-xs text-charcoal/50 hover:text-charcoal underline"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={promoInput}
+                        onChange={(e) => { setPromoInput(e.target.value.toUpperCase()); setPromoError(""); }}
+                        placeholder="Enter code"
+                        className={`${inputClass} flex-1`}
+                      />
+                      <button
+                        type="button"
+                        onClick={applyPromoCode}
+                        disabled={applyingPromo || !promoInput.trim()}
+                        className="border border-charcoal text-charcoal text-[10px] tracking-[0.15em] uppercase px-4 py-2 hover:bg-charcoal hover:text-white transition-all disabled:opacity-30"
+                      >
+                        {applyingPromo ? <Loader2 size={12} className="animate-spin" /> : "Apply"}
+                      </button>
+                    </div>
+                  )}
+                  {promoError && <p className="text-xs text-red-500 mt-1">{promoError}</p>}
+                </div>
+
+                <div className="border-t border-light-gray pt-5">
                   <label className={labelClass}>
                     Additional Requests (optional)
                   </label>
@@ -552,59 +757,6 @@ export function CheckoutForm({ quoteId }: { quoteId: string }) {
                     Special requests are not guaranteed but the property will do
                     its best to accommodate.
                   </p>
-                </div>
-
-                <div className="border-t border-light-gray pt-5 space-y-3">
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={form.earlyCheckin}
-                      onChange={(e) =>
-                        updateForm({ earlyCheckin: e.target.checked })
-                      }
-                      className="w-4 h-4 accent-charcoal"
-                    />
-                    <span className="text-sm text-charcoal">
-                      Early check-in (before 3:00 PM)
-                    </span>
-                  </label>
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={form.lateCheckout}
-                      onChange={(e) =>
-                        updateForm({ lateCheckout: e.target.checked })
-                      }
-                      className="w-4 h-4 accent-charcoal"
-                    />
-                    <span className="text-sm text-charcoal">
-                      Late check-out (after 11:00 AM)
-                    </span>
-                  </label>
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={form.needsCrib}
-                      onChange={(e) =>
-                        updateForm({ needsCrib: e.target.checked })
-                      }
-                      className="w-4 h-4 accent-charcoal"
-                    />
-                    <span className="text-sm text-charcoal">
-                      Pack-n-play / Crib
-                    </span>
-                  </label>
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={form.needsHighChair}
-                      onChange={(e) =>
-                        updateForm({ needsHighChair: e.target.checked })
-                      }
-                      className="w-4 h-4 accent-charcoal"
-                    />
-                    <span className="text-sm text-charcoal">High chair</span>
-                  </label>
                 </div>
               </div>
             </div>
@@ -744,12 +896,14 @@ export function CheckoutForm({ quoteId }: { quoteId: string }) {
                   {checkInDate.toLocaleDateString("en-US", {
                     month: "short",
                     day: "numeric",
+                    timeZone: "UTC",
                   })}{" "}
                   &ndash;{" "}
                   {checkOutDate.toLocaleDateString("en-US", {
                     month: "short",
                     day: "numeric",
                     year: "numeric",
+                    timeZone: "UTC",
                   })}
                 </span>
                 <span>
@@ -778,19 +932,19 @@ export function CheckoutForm({ quoteId }: { quoteId: string }) {
                 )}
                 {quote.extraGuestFee > 0 && (
                   <div className="flex justify-between text-charcoal/60">
-                    <span>Extra guest fee</span>
+                    <span>Extra guest fee <span className="text-[9px] text-warm-gray">({rule?.extraGuestFeeType === "per_stay" ? "per stay" : "per night"})</span></span>
                     <span>${quote.extraGuestFee.toFixed(2)}</span>
                   </div>
                 )}
                 {quote.taxAmount > 0 && (
                   <div className="flex justify-between text-charcoal/60">
-                    <span>Taxes &amp; fees</span>
+                    <span>{rule?.taxLabel || "Taxes & fees"}</span>
                     <span>${quote.taxAmount.toFixed(2)}</span>
                   </div>
                 )}
                 {quote.serviceFee > 0 && (
                   <div className="flex justify-between text-charcoal/60">
-                    <span>Service fee</span>
+                    <span>{rule?.serviceFeeLabel || "Service fee"}</span>
                     <span>${quote.serviceFee.toFixed(2)}</span>
                   </div>
                 )}
@@ -804,18 +958,29 @@ export function CheckoutForm({ quoteId }: { quoteId: string }) {
                     ))}
                   </>
                 )}
-                {quote.depositHold > 0 && (
-                  <div className="flex justify-between text-charcoal/60">
-                    <span>Deposit hold <span className="text-[9px]">(refundable)</span></span>
-                    <span>${quote.depositHold.toFixed(2)}</span>
+                {quote.promoDiscount > 0 && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Promo ({quote.promoCode})</span>
+                    <span>-${quote.promoDiscount.toFixed(2)}</span>
                   </div>
                 )}
               </div>
 
               <div className="flex justify-between font-medium text-charcoal border-t border-light-gray pt-3">
-                <span>Final charge</span>
+                <span>Final Charge</span>
                 <span>${quote.total.toFixed(2)}</span>
               </div>
+              {quote.depositHold > 0 && (
+                <div className="mt-3 pt-3 border-t border-dashed border-light-gray">
+                  <div className="flex justify-between text-charcoal/60 text-sm">
+                    <span>{rule?.depositHoldLabel || "Security Deposit Hold"} <span className="text-[9px]">(refundable)</span></span>
+                    <span>${quote.depositHold.toFixed(2)}</span>
+                  </div>
+                  <p className="text-[9px] text-warm-gray mt-1">
+                    Charged upon signing rental agreement
+                  </p>
+                </div>
+              )}
             </div>
 
             {minutesLeft > 0 && minutesLeft <= 10 && (

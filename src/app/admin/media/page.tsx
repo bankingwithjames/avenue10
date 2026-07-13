@@ -1096,7 +1096,11 @@ export default function AdminMediaPage() {
                       <div key={item.id} className="flex items-center gap-3 p-2 border border-light-gray">
                         <span className="text-[10px] text-warm-gray w-6 text-center">{idx + 1}</span>
                         <div className="w-[50px] h-[38px] bg-light-gray overflow-hidden shrink-0">
-                          {mediaItem && <img src={mediaItem.url} alt="" className="w-full h-full object-cover" />}
+                          {mediaItem && (mediaItem.mimeType?.startsWith("video/") ? (
+                            <video src={mediaItem.url} className="w-full h-full object-cover" muted />
+                          ) : (
+                            <img src={mediaItem.url} alt="" className="w-full h-full object-cover" />
+                          ))}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs text-charcoal truncate">{mediaItem?.originalName || "Unknown"}</p>

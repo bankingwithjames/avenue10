@@ -181,8 +181,8 @@ export default function AnalyticsTab({ listingId }: AnalyticsTabProps) {
                   <div className="flex items-center gap-3 text-[9px] text-warm-gray">
                     {ab.checkIn && ab.checkOut && (
                       <span>
-                        {new Date(ab.checkIn).toLocaleDateString()} –{" "}
-                        {new Date(ab.checkOut).toLocaleDateString()}
+                        {new Date(ab.checkIn).toLocaleDateString("en-US", { timeZone: "UTC" })} –{" "}
+                        {new Date(ab.checkOut).toLocaleDateString("en-US", { timeZone: "UTC" })}
                       </span>
                     )}
                     <span>{fmt(ab.totalQuote)}</span>

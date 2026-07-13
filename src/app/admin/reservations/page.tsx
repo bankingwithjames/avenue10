@@ -132,8 +132,8 @@ export default function AdminReservationsPage() {
                       </div>
                       <p className="text-xs text-warm-gray">
                         {r.listing.title} &middot;{" "}
-                        {new Date(r.checkIn).toLocaleDateString("en-US", { month: "short", day: "numeric" })} &ndash;{" "}
-                        {new Date(r.checkOut).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} &middot;{" "}
+                        {new Date(r.checkIn).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })} &ndash;{" "}
+                        {new Date(r.checkOut).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })} &middot;{" "}
                         {r.guests} guest{r.guests > 1 ? "s" : ""}
                       </p>
                       <p className="text-xs text-warm-gray">
@@ -249,7 +249,12 @@ export default function AdminReservationsPage() {
                     {r.notes && (
                       <div className="text-xs">
                         <span className="text-[9px] tracking-[0.1em] uppercase text-warm-gray block mb-0.5">Guest Notes</span>
-                        <p className="text-charcoal/70 italic">{r.notes}</p>
+                        <p className="text-charcoal/70 italic">{r.notes.replace(/\{[^}]*"street"[^}]*\}/g, (match) => {
+                          try {
+                            const addr = JSON.parse(match);
+                            return [addr.street, addr.city, addr.state, addr.zip, addr.country].filter(Boolean).join(", ");
+                          } catch { return match; }
+                        })}</p>
                       </div>
                     )}
                     {r.declinedReason && (

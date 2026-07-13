@@ -377,20 +377,22 @@ export default function AdminDashboard() {
       {/* KPI CARDS ROW 1                                                   */}
       {/* ================================================================= */}
       <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
-        <KPICard icon={Home} label="Active Listings" value={activeListings.length} />
+        <KPICard icon={Home} label="Active Listings" value={activeListings.length} href="/admin/listings" />
         <KPICard
           icon={BarChart3}
           label="Occupancy This Month"
           value={`${occupancyRate}%`}
           dot={occupancyRate >= 70 ? "green" : occupancyRate >= 40 ? "amber" : "red"}
+          href="/admin/availability"
         />
-        <KPICard icon={CalendarCheck} label="Confirmed Bookings" value={confirmedReservations.length} dot="green" />
-        <KPICard icon={DollarSign} label="Monthly Revenue" value={formatCurrency(monthlyRevenue)} />
+        <KPICard icon={CalendarCheck} label="Confirmed Bookings" value={confirmedReservations.length} dot="green" href="/admin/reservations" />
+        <KPICard icon={DollarSign} label="Monthly Revenue" value={formatCurrency(monthlyRevenue)} href="/admin/revenue" />
         <KPICard
           icon={ClipboardList}
           label="Pending Requests"
           value={pendingRequests.length}
           dot={pendingRequests.length > 0 ? "amber" : "green"}
+          href="/admin/checkin"
         />
       </div>
 
@@ -401,30 +403,35 @@ export default function AdminDashboard() {
           label="Check-ins Today"
           value={checkInsToday.length}
           dot={checkInsToday.length > 0 ? "green" : "gray"}
+          href="/admin/checkin"
         />
         <KPICard
           icon={LogOut}
           label="Check-outs Today"
           value={checkOutsToday.length}
           dot={checkOutsToday.length > 0 ? "amber" : "gray"}
+          href="/admin/checkin"
         />
         <KPICard
           icon={AlertCircle}
           label="Open Requests"
           value={pendingRequests.length}
           dot={pendingRequests.length > 0 ? "amber" : "green"}
+          href="/admin/checkin"
         />
         <KPICard
           icon={Star}
           label="Pending Reviews"
           value={pendingReviews.length}
           dot={pendingReviews.length > 0 ? "amber" : "gray"}
+          href="/admin/checkin"
         />
         <KPICard
           icon={FileText}
           label="Terms Unsigned"
           value={confirmedReservations.filter((r) => !r.accessCode).length}
           dot={confirmedReservations.filter((r) => !r.accessCode).length > 0 ? "red" : "green"}
+          href="/admin/checkin"
         />
       </div>
 
@@ -631,7 +638,7 @@ export default function AdminDashboard() {
       <Section
         title="Integrations"
         icon={Plug}
-        action={{ label: "Manage Integrations", href: "/admin/revenue?tab=integrations" }}
+        action={{ label: "Manage Integrations", href: "/admin/integrations" }}
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {integrations.map((intg) => (
@@ -674,14 +681,16 @@ function KPICard({
   label,
   value,
   dot,
+  href,
 }: {
   icon: React.ComponentType<{ size?: number; className?: string }>;
   label: string;
   value: string | number;
   dot?: "green" | "amber" | "red" | "gray";
+  href?: string;
 }) {
-  return (
-    <div className="bg-white border border-light-gray p-4 min-w-[160px] flex-shrink-0">
+  const content = (
+    <>
       <div className="flex items-center gap-2">
         <Icon size={14} className="text-warm-gray" />
         <span className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium whitespace-nowrap">
@@ -690,6 +699,20 @@ function KPICard({
         {dot && <Dot color={dot} />}
       </div>
       <p className="text-xl font-light text-charcoal mt-2 font-serif">{value}</p>
+    </>
+  );
+
+  if (href) {
+    return (
+      <Link href={href} className="bg-white border border-light-gray p-4 min-w-[160px] flex-shrink-0 hover:border-warm-gray transition-colors">
+        {content}
+      </Link>
+    );
+  }
+
+  return (
+    <div className="bg-white border border-light-gray p-4 min-w-[160px] flex-shrink-0">
+      {content}
     </div>
   );
 }

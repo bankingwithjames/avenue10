@@ -64,7 +64,7 @@ const navSections: NavSection[] = [
   {
     label: "System",
     items: [
-      { href: "/admin/revenue?tab=integrations", label: "Integrations", icon: Plug },
+      { href: "/admin/integrations", label: "Integrations", icon: Plug },
       { href: "/admin/settings", label: "Settings", icon: Settings },
     ],
   },

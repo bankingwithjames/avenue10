@@ -122,8 +122,8 @@ function AddOnRow({
                 <input
                   type="number"
                   className={`${inputClass} pl-7`}
-                  value={addOn.price}
-                  onChange={(e) => onUpdate({ ...addOn, price: Number(e.target.value) })}
+                  value={addOn.price || ""}
+                  onChange={(e) => onUpdate({ ...addOn, price: e.target.value === "" ? 0 : Number(e.target.value) })}
                   min={0}
                 />
               </div>

@@ -24,6 +24,7 @@ import { wrapEmailHtml, renderTemplateVars, SAMPLE_PREVIEW_VARS } from "@/lib/em
 import { DataTable, DataTableColumn } from "@/components/admin/DataTable";
 import { MessagingStatusBanner } from "@/components/admin/MessagingStatusBanner";
 import { PersonalizationVariablesPanel } from "@/components/admin/PersonalizationVariables";
+import SendCommunicationModal from "@/components/admin/SendCommunicationModal";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -339,6 +340,7 @@ export default function AutomationCenterPage() {
   const [previewTemplate, setPreviewTemplate] = useState<{ name: string; type: string; subject: string; body: string } | null>(null);
 
   const [saving, setSaving] = useState(false);
+  const [sendCommModalOpen, setSendCommModalOpen] = useState(false);
 
   // ── Data Fetching ──
   const fetchAll = useCallback(async () => {
@@ -766,9 +768,14 @@ export default function AutomationCenterPage() {
           <h1 className="font-serif text-2xl text-charcoal font-light">Automation Center</h1>
           <p className="text-xs text-warm-gray mt-1">Automated guest messaging — rules, templates, and delivery activity.</p>
         </div>
-        <button onClick={openAutomationNew} className="bg-charcoal text-white text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-stone transition px-4 py-2.5 flex items-center gap-1.5 self-start sm:self-auto">
-          <Plus size={12} /> New Automation
-        </button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button onClick={() => setSendCommModalOpen(true)} className="bg-charcoal text-white text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-stone transition px-4 py-2.5 flex items-center gap-1.5">
+            <Send size={12} /> Send Communication
+          </button>
+          <button onClick={openAutomationNew} className="bg-charcoal text-white text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-stone transition px-4 py-2.5 flex items-center gap-1.5">
+            <Plus size={12} /> New Automation
+          </button>
+        </div>
       </div>
 
       {/* ─── Stat Tiles ──────────────────────────────────────────────── */}
@@ -1241,6 +1248,13 @@ export default function AutomationCenterPage() {
           </div>
         </div>
       )}
+
+      {/* Send Communication Modal */}
+      <SendCommunicationModal
+        open={sendCommModalOpen}
+        onClose={() => setSendCommModalOpen(false)}
+        templates={templates}
+      />
     </div>
   );
 }

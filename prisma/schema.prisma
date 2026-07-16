@@ -1463,6 +1463,16 @@ model CrmActivityLog {
   @@index([guestId])
 }
 
+
+model CtaLink {
+  id          String   @id @default(cuid())
+  label       String
+  url         String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
 model Integration {
   id             String    @id @default(cuid())
   name           String    @unique

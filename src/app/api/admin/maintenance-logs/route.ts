@@ -43,16 +43,79 @@ export async function GET(req: NextRequest) {
   }
 }
 
+const DATE_FIELDS = [
+  "maintenanceDate",
+  "scheduledDate",
+  "startTime",
+  "endTime",
+  "dueDate",
+  "completedDate",
+] as const;
+
+const NUMBER_FIELDS = [
+  "cost",
+  "estimatedCost",
+  "actualCost",
+  "laborCost",
+  "materialsCost",
+] as const;
+
+// The form sends dates as "YYYY-MM-DD" and numbers as strings; Prisma needs
+// full ISO datetimes and real numbers. Empty strings mean "unset".
+function sanitize(body: Record<string, unknown>) {
+  const data: Record<string, unknown> = { ...body };
+  for (const key of Object.keys(data)) {
+    if (data[key] === "") delete data[key];
+  }
+  for (const f of DATE_FIELDS) {
+    if (data[f] != null) {
+      const d = new Date(String(data[f]));
+      if (isNaN(d.getTime())) delete data[f];
+      else data[f] = d.toISOString();
+    }
+  }
+  for (const f of NUMBER_FIELDS) {
+    if (data[f] != null) {
+      const n = Number(data[f]);
+      data[f] = isNaN(n) ? 0 : n;
+    }
+  }
+  return data;
+}
+
 export async function POST(req: NextRequest) {
   const { error } = await requireAdmin();
   if (error) return error;
 
   try {
-    const body = await req.json();
-    const log = await prisma.maintenanceLog.create({ data: body });
+    const body = sanitize(await req.json());
+    if (!body.maintenanceDate) body.maintenanceDate = new Date().toISOString();
+    if (!body.issueType) body.issueType = (body.category as string) || "General Repair";
+    if (!body.description) body.description = (body.issueTitle as string) || "";
+    const log = await prisma.maintenanceLog.create({ data: body as never });
     return NextResponse.json(log, { status: 201 });
   } catch (e) {
     console.error("POST /api/admin/maintenance-logs error:", e);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  const { error } = await requireAdmin();
+  if (error) return error;
+
+  try {
+    const id = req.nextUrl.searchParams.get("id");
+    if (!id) {
+      return NextResponse.json({ error: "id required" }, { status: 400 });
+    }
+    await prisma.maintenanceLog.delete({ where: { id } });
+    return NextResponse.json({ success: true });
+  } catch (e) {
+    console.error("DELETE /api/admin/maintenance-logs error:", e);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -65,11 +128,12 @@ export async function PUT(req: NextRequest) {
   if (error) return error;
 
   try {
-    const { id, ...data } = await req.json();
+    const { id, ...rest } = await req.json();
     if (!id) {
       return NextResponse.json({ error: "id required" }, { status: 400 });
     }
-    const log = await prisma.maintenanceLog.update({ where: { id }, data });
+    const data = sanitize(rest);
+    const log = await prisma.maintenanceLog.update({ where: { id }, data: data as never });
     return NextResponse.json(log);
   } catch (e) {
     console.error("PUT /api/admin/maintenance-logs error:", e);

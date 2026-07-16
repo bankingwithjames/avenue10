@@ -797,8 +797,8 @@ export default function AdminListingsPage() {
 
         {createStep === 2 && (
           <div className="space-y-4">
-            <div><label className={labelClass}>Price Per Night ($)</label><input type="number" min={0} step={0.01} value={form.pricePerNight} onChange={e => setForm({ ...form, pricePerNight: Number(e.target.value) })} className={inputClass} /></div>
-            <div><label className={labelClass}>Cleaning Fee ($)</label><input type="number" min={0} step={0.01} value={form.cleaningFee} onChange={e => setForm({ ...form, cleaningFee: Number(e.target.value) })} className={inputClass} /></div>
+            <div><label className={labelClass}>Price Per Night ($)</label><input type="number" min={0} step={0.01} value={form.pricePerNight || ""} onChange={e => setForm({ ...form, pricePerNight: Number(e.target.value) })} className={inputClass} placeholder="0.00" /></div>
+            <div><label className={labelClass}>Cleaning Fee ($)</label><input type="number" min={0} step={0.01} value={form.cleaningFee || ""} onChange={e => setForm({ ...form, cleaningFee: Number(e.target.value) })} className={inputClass} placeholder="0.00" /></div>
           </div>
         )}
 

@@ -169,11 +169,11 @@ function PricingTab() {
     <div className="space-y-4">
       <div>
         <label className={labelClass}>Default Cleaning Fee</label>
-        <input className={inputClass} type="number" value={data.cleaningFee} onChange={(e) => update("cleaningFee", Number(e.target.value))} />
+        <input className={inputClass} type="number" value={data.cleaningFee || ""} onChange={(e) => update("cleaningFee", Number(e.target.value))} placeholder="0.00" />
       </div>
       <div>
         <label className={labelClass}>Default Service Fee %</label>
-        <input className={inputClass} type="number" value={data.serviceFeePercent} onChange={(e) => update("serviceFeePercent", Number(e.target.value))} />
+        <input className={inputClass} type="number" value={data.serviceFeePercent || ""} onChange={(e) => update("serviceFeePercent", Number(e.target.value))} placeholder="0" />
       </div>
       <div>
         <label className={labelClass}>Minimum Stay Nights</label>

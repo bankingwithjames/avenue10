@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useCallback } from "react";
 import { Plus, Check, X } from "lucide-react";
@@ -148,7 +148,7 @@ export default function ChangeOrdersTab({ listingId }: ChangeOrdersTabProps) {
 
         {showCreate && (
           <div className="mb-6 p-4 bg-cream/50 border border-light-gray space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className={labelClass}>Reservation Code</label>
                 <input
@@ -182,7 +182,7 @@ export default function ChangeOrdersTab({ listingId }: ChangeOrdersTabProps) {
                 placeholder="e.g. Guest wants to add 1 extra guest for remaining nights"
               />
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className={labelClass}>Original Value</label>
                 <input

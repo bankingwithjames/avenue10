@@ -3,9 +3,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Package,
-  Search,
-  ChevronDown,
-  ChevronRight,
   Eye,
   EyeOff,
   Plus,
@@ -37,7 +34,9 @@ import {
   MoreHorizontal,
   Ban,
   Archive,
+  Settings,
 } from "lucide-react";
+import { DataTable, DataTableColumn, DataTableFilter } from "@/components/admin/DataTable";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -83,6 +82,7 @@ interface InventoryRoomRecord {
   listingId: string | null;
   roomName: string;
   roomType: string;
+  floor: number;
   displayOrder: number;
   notes: string | null;
   isActive: boolean;
@@ -201,9 +201,12 @@ function Badge({ children, className = "" }: { children: React.ReactNode; classN
   return <span className={`text-[9px] tracking-[0.1em] uppercase font-medium px-2 py-0.5 ${className}`}>{children}</span>;
 }
 
-function StatCard({ label, value, icon: Icon }: { label: string; value: string | number; icon: typeof Package }) {
+function StatCard({ label, value, icon: Icon, onClick }: { label: string; value: string | number; icon: typeof Package; onClick?: () => void }) {
   return (
-    <div className="bg-white border border-light-gray p-4">
+    <div
+      className={`bg-white border border-light-gray p-4${onClick ? " hover:border-warm-gray cursor-pointer transition-colors" : ""}`}
+      onClick={onClick}
+    >
       <div className="flex items-center justify-between mb-2">
         <span className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">{label}</span>
         <Icon size={14} className="text-warm-gray" />
@@ -231,9 +234,23 @@ function DrawerTabButton({ active, onClick, children }: { active: boolean; onCli
 
 // ─── Main Component ─────────────────────────────────────────────────────
 
+function scrollToContent(id: string) {
+  // defer so the tab/filter state applies and content renders first
+  setTimeout(() => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "auto", block: "start" });
+  }, 60);
+}
+
 export default function InventoryManagementPage() {
   // ── State ──
-  const [mainTab, setMainTab] = useState<"rooms" | "all" | "restock" | "issues">("rooms");
+  const [mainTab, setMainTab] = useState<"rooms" | "all" | "restock" | "issues" | "manage-rooms">("rooms");
+  const [editingRoom, setEditingRoom] = useState<InventoryRoomRecord | null>(null);
+  const [editRoomForm, setEditRoomForm] = useState({ roomName: "", roomType: "other", floor: 1, notes: "" });
+  const [roomPropertyTab, setRoomPropertyTab] = useState("");
+
+  // Items view state
+  const [itemPropertyTab, setItemPropertyTab] = useState("");
+  const [itemRoomTab, setItemRoomTab] = useState("all");
 
   // Data
   const [items, setItems] = useState<PropertyInventoryItem[]>([]);
@@ -246,15 +263,6 @@ export default function InventoryManagementPage() {
   // Loading/error
   const [loading, setLoading] = useState(true);
   const [itemsError, setItemsError] = useState(false);
-
-  // Search/filter
-  const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [roomFilter, setRoomFilter] = useState("all");
-
-  // Collapsed rooms
-  const [collapsedRooms, setCollapsedRooms] = useState<Set<string>>(new Set());
 
   // Drawers
   const [selectedItem, setSelectedItem] = useState<PropertyInventoryItem | null>(null);
@@ -271,7 +279,7 @@ export default function InventoryManagementPage() {
     unitCost: 0, replacementCost: 0, vendorId: "", conditionStatus: "new",
     guestVisible: false, cleanerCheckRequired: false, notes: "",
   });
-  const [newRoom, setNewRoom] = useState({ propertyId: "", roomName: "", roomType: "other", notes: "" });
+  const [newRoom, setNewRoom] = useState({ propertyId: "", roomName: "", roomType: "other", floor: 1, notes: "" });
   const [usageForm, setUsageForm] = useState({ itemId: "", quantityUsed: 1, reason: "guest_stay", bookingId: "", notes: "" });
   const [restockForm, setRestockForm] = useState({ itemId: "", quantityAdded: 1, unitCost: 0, vendorId: "", receiptUrl: "", notes: "" });
   const [saving, setSaving] = useState(false);
@@ -303,49 +311,8 @@ export default function InventoryManagementPage() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  // ── Filtered Items ──
-  const filteredItems = useMemo(() => {
-    let list = items.filter(i => !i.archivedAt);
-
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter(i =>
-        i.itemName.toLowerCase().includes(q) ||
-        i.category.toLowerCase().includes(q) ||
-        i.description?.toLowerCase().includes(q) ||
-        i.room?.roomName?.toLowerCase().includes(q) ||
-        i.vendor?.vendorName?.toLowerCase().includes(q)
-      );
-    }
-
-    if (categoryFilter !== "all") list = list.filter(i => i.category === categoryFilter);
-    if (statusFilter !== "all") list = list.filter(i => i.inventoryStatus === statusFilter);
-    if (roomFilter !== "all") list = list.filter(i => i.roomId === roomFilter || (!i.roomId && roomFilter === "unassigned"));
-
-    return list;
-  }, [items, search, categoryFilter, statusFilter, roomFilter]);
-
-  // ── Items grouped by room ──
-  const itemsByRoom = useMemo(() => {
-    const map = new Map<string, PropertyInventoryItem[]>();
-    for (const item of filteredItems) {
-      const key = item.roomId || "unassigned";
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(item);
-    }
-    return map;
-  }, [filteredItems]);
-
-  // ── Room display order ──
-  const sortedRoomKeys = useMemo(() => {
-    const roomOrder = new Map(rooms.map(r => [r.id, r.displayOrder]));
-    const keys = Array.from(itemsByRoom.keys());
-    return keys.sort((a, b) => {
-      if (a === "unassigned") return 1;
-      if (b === "unassigned") return -1;
-      return (roomOrder.get(a) ?? 999) - (roomOrder.get(b) ?? 999);
-    });
-  }, [itemsByRoom, rooms]);
+  // ── Active (non-archived) Items ──
+  const filteredItems = useMemo(() => items.filter(i => !i.archivedAt), [items]);
 
   // ── Low stock items ──
   const lowStockItems = useMemo(() =>
@@ -373,7 +340,7 @@ export default function InventoryManagementPage() {
     return {
       totalItems: active.length,
       roomsTracked: new Set(active.map(i => i.roomId).filter(Boolean)).size,
-      totalValue: active.reduce((s, i) => s + (i.quantityOnHand * (i.avgUnitCost || i.unitCost)), 0),
+      totalValue: active.reduce((s, i) => s + (i.quantityOnHand * i.unitCost), 0),
       lowStock: lowStockItems.length,
       needsReplacement: needsReplace.length,
       usedThisMonth: totalUsedThisMonth,
@@ -387,16 +354,6 @@ export default function InventoryManagementPage() {
     if (!roomId) return "Unassigned";
     const r = rooms.find(rm => rm.id === roomId);
     return r?.roomName || "Unknown Room";
-  };
-
-  // ── Toggle room collapse ──
-  const toggleRoom = (roomId: string) => {
-    setCollapsedRooms(prev => {
-      const next = new Set(prev);
-      if (next.has(roomId)) next.delete(roomId);
-      else next.add(roomId);
-      return next;
-    });
   };
 
   // ── CRUD Actions ──
@@ -457,11 +414,39 @@ export default function InventoryManagementPage() {
       });
       if (res.ok) {
         setShowAddRoom(false);
-        setNewRoom({ propertyId: "", roomName: "", roomType: "other", notes: "" });
+        setNewRoom({ propertyId: "", roomName: "", roomType: "other", floor: 1, notes: "" });
         await fetchAll();
       }
     } catch { /* ignore */ }
     setSaving(false);
+  };
+
+  const updateRoom = async (roomId: string) => {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/admin/inventory-rooms/${roomId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editRoomForm),
+      });
+      if (res.ok) {
+        setEditingRoom(null);
+        await fetchAll();
+      }
+    } catch { /* ignore */ }
+    setSaving(false);
+  };
+
+  const deleteRoom = async (room: InventoryRoomRecord) => {
+    const roomItems = items.filter(i => i.roomId === room.id);
+    const msg = roomItems.length > 0
+      ? `Delete "${room.roomName}"? ${roomItems.length} item(s) in this room will become unassigned.`
+      : `Delete "${room.roomName}"?`;
+    if (!confirm(msg)) return;
+    try {
+      await fetch(`/api/admin/inventory-rooms/${room.id}`, { method: "DELETE" });
+      await fetchAll();
+    } catch { /* ignore */ }
   };
 
   const recordUsage = async () => {
@@ -485,15 +470,10 @@ export default function InventoryManagementPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (res.ok && item) {
-        const newQty = Math.max(0, item.quantityOnHand - Number(usageForm.quantityUsed));
-        await updateItem(item.id, {
-          quantityOnHand: newQty,
-          quantityUsed: item.quantityUsed + Number(usageForm.quantityUsed),
-          inventoryStatus: newQty <= item.reorderThreshold && item.reorderThreshold > 0 ? "low_stock" : newQty === 0 ? "missing" : "ok",
-        });
+      if (res.ok) {
         setShowRecordUsage(false);
         setUsageForm({ itemId: "", quantityUsed: 1, reason: "guest_stay", bookingId: "", notes: "" });
+        await fetchAll();
       }
     } catch { /* ignore */ }
     setSaving(false);
@@ -504,13 +484,15 @@ export default function InventoryManagementPage() {
     setSaving(true);
     try {
       const item = items.find(i => i.id === restockForm.itemId);
+      const qty = Number(restockForm.quantityAdded);
+      const cost = Number(restockForm.unitCost) || item?.unitCost || 0;
       const payload = {
         propertyId: item?.propertyId || "",
         itemId: restockForm.itemId,
-        restockDate: new Date().toISOString(),
-        quantityAdded: Number(restockForm.quantityAdded),
-        unitCost: Number(restockForm.unitCost) || item?.unitCost || 0,
-        totalCost: Number(restockForm.quantityAdded) * (Number(restockForm.unitCost) || item?.unitCost || 0),
+        purchaseDate: new Date().toISOString(),
+        quantityPurchased: qty,
+        unitCost: cost,
+        totalCost: qty * cost,
         vendorId: restockForm.vendorId || undefined,
         receiptUrl: restockForm.receiptUrl || undefined,
         notes: restockForm.notes || undefined,
@@ -520,15 +502,10 @@ export default function InventoryManagementPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (res.ok && item) {
-        const newQty = item.quantityOnHand + Number(restockForm.quantityAdded);
-        await updateItem(item.id, {
-          quantityOnHand: newQty,
-          lastRestockedAt: new Date().toISOString(),
-          inventoryStatus: newQty > item.reorderThreshold ? "ok" : "low_stock",
-        });
+      if (res.ok) {
         setShowRestock(false);
         setRestockForm({ itemId: "", quantityAdded: 1, unitCost: 0, vendorId: "", receiptUrl: "", notes: "" });
+        await fetchAll();
       }
     } catch { /* ignore */ }
     setSaving(false);
@@ -539,6 +516,108 @@ export default function InventoryManagementPage() {
     setSelectedItem(item);
     setDrawerTab("basic");
   };
+
+  // ── Shared DataTable filters for item tables ──
+  const itemFilters: DataTableFilter<PropertyInventoryItem>[] = [
+    {
+      key: "category",
+      label: "Category",
+      options: CATEGORIES.map(c => ({ value: c, label: c })),
+      match: (r, v) => r.category === v,
+    },
+    {
+      key: "status",
+      label: "Status",
+      options: ["ok", "low_stock", "missing", "damaged", "replace_soon"].map(s => ({ value: s, label: statusLabel(s) })),
+      match: (r, v) => r.inventoryStatus === v,
+    },
+  ];
+
+  const roomFilterDef: DataTableFilter<PropertyInventoryItem> = {
+    key: "room",
+    label: "Room",
+    options: [
+      ...rooms.map(r => ({ value: r.id, label: r.roomName })),
+      { value: "unassigned", label: "Unassigned" },
+    ],
+    match: (r, v) => (v === "unassigned" ? !r.roomId : r.roomId === v),
+  };
+
+  // ── All Items table columns ──
+  const allItemsColumns: DataTableColumn<PropertyInventoryItem>[] = [
+    {
+      key: "itemName",
+      label: "Item",
+      accessor: i => i.itemName,
+      render: i => (
+        <>
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-charcoal">{i.itemName}</span>
+            {i.guestVisible && <Eye size={10} className="text-warm-gray" />}
+          </div>
+          <p className="text-[10px] text-warm-gray">{ITEM_TYPE_LABELS[i.itemType] || i.itemType}</p>
+        </>
+      ),
+    },
+    {
+      key: "room",
+      label: "Room",
+      accessor: i => roomName(i.roomId),
+      render: i => <span className="text-warm-gray">{roomName(i.roomId)}</span>,
+      responsiveClass: "hidden md:table-cell",
+    },
+    {
+      key: "category",
+      label: "Category",
+      accessor: i => i.category,
+      render: i => <span className="text-warm-gray">{i.category}</span>,
+      responsiveClass: "hidden md:table-cell",
+    },
+    {
+      key: "qty",
+      label: "Qty",
+      accessor: i => i.quantityOnHand,
+      className: "text-center",
+      render: i => (
+        <span className={`font-medium ${i.quantityOnHand < i.quantityExpected ? "text-red-600" : "text-charcoal"}`}>
+          {i.quantityOnHand}/{i.quantityExpected}
+        </span>
+      ),
+    },
+    {
+      key: "status",
+      label: "Status",
+      accessor: i => i.inventoryStatus,
+      render: i => <Badge className={STATUS_COLORS[i.inventoryStatus] || "text-gray-500 bg-gray-100"}>{statusLabel(i.inventoryStatus)}</Badge>,
+    },
+    {
+      key: "condition",
+      label: "Condition",
+      accessor: i => i.conditionStatus,
+      render: i => <Badge className={CONDITION_COLORS[i.conditionStatus] || "text-gray-500 bg-gray-100"}>{i.conditionStatus}</Badge>,
+      responsiveClass: "hidden lg:table-cell",
+    },
+    {
+      key: "unitCost",
+      label: "Cost",
+      accessor: i => i.unitCost,
+      className: "text-right",
+      render: i => <span className="text-charcoal">{formatCurrencyDecimal(i.unitCost)}</span>,
+      responsiveClass: "hidden lg:table-cell",
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      sortable: false,
+      className: "text-right",
+      headerClassName: "text-right",
+      render: i => (
+        <button onClick={e => { e.stopPropagation(); openItem(i); }} className="text-charcoal hover:bg-cream p-1 transition" title="View Details">
+          <Eye size={14} />
+        </button>
+      ),
+    },
+  ];
 
   // ── Loading ──
   if (loading) {
@@ -607,18 +686,18 @@ export default function InventoryManagementPage() {
 
       {/* ─── KPI Dashboard Cards ─────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-3 mb-6">
-        <StatCard label="Total Items" value={stats.totalItems} icon={Package} />
-        <StatCard label="Rooms Tracked" value={stats.roomsTracked} icon={Home} />
-        <StatCard label="Inventory Value" value={formatCurrency(stats.totalValue)} icon={DollarSign} />
-        <StatCard label="Low Stock" value={stats.lowStock} icon={AlertTriangle} />
-        <StatCard label="Replace Needed" value={stats.needsReplacement} icon={Wrench} />
+        <StatCard label="Total Items" value={stats.totalItems} icon={Package} onClick={() => { setMainTab("all"); scrollToContent("admin-tab-content"); }} />
+        <StatCard label="Rooms Tracked" value={stats.roomsTracked} icon={Home} onClick={() => { setMainTab("manage-rooms"); scrollToContent("admin-tab-content"); }} />
+        <StatCard label="Inventory Value" value={formatCurrency(stats.totalValue)} icon={DollarSign} onClick={() => { setMainTab("all"); scrollToContent("admin-tab-content"); }} />
+        <StatCard label="Low Stock" value={stats.lowStock} icon={AlertTriangle} onClick={() => { setMainTab("all"); scrollToContent("admin-tab-content"); }} />
+        <StatCard label="Replace Needed" value={stats.needsReplacement} icon={Wrench} onClick={() => { setMainTab("all"); scrollToContent("admin-tab-content"); }} />
         <StatCard label="Used This Month" value={formatCurrency(stats.usedThisMonth)} icon={BarChart3} />
-        <StatCard label="Restock Cost" value={formatCurrency(stats.restockCost)} icon={ShoppingCart} />
-        <StatCard label="Open Issues" value={stats.openIssues} icon={Shield} />
+        <StatCard label="Restock Cost" value={formatCurrency(stats.restockCost)} icon={ShoppingCart} onClick={() => { setMainTab("restock"); scrollToContent("admin-tab-content"); }} />
+        <StatCard label="Open Issues" value={stats.openIssues} icon={Shield} onClick={() => { setMainTab("issues"); scrollToContent("admin-tab-content"); }} />
       </div>
 
       {/* ─── Main Tabs ───────────────────────────────────────────────── */}
-      <div className="flex items-center border border-light-gray bg-white mb-6 overflow-x-auto">
+      <div id="admin-tab-content" className="flex items-center border border-light-gray bg-white mb-6 overflow-x-auto">
         <TabButton active={mainTab === "rooms"} onClick={() => setMainTab("rooms")}>
           <span className="flex items-center gap-1.5"><Home size={12} /> By Room</span>
         </TabButton>
@@ -631,206 +710,260 @@ export default function InventoryManagementPage() {
         <TabButton active={mainTab === "issues"} onClick={() => setMainTab("issues")}>
           <span className="flex items-center gap-1.5"><AlertTriangle size={12} /> Issues ({stats.openIssues})</span>
         </TabButton>
+        <TabButton active={mainTab === "manage-rooms"} onClick={() => setMainTab("manage-rooms")}>
+          <span className="flex items-center gap-1.5"><Settings size={12} /> Rooms ({rooms.length})</span>
+        </TabButton>
       </div>
-
-      {/* ─── Search & Filters ────────────────────────────────────────── */}
-      {(mainTab === "rooms" || mainTab === "all") && (
-        <div className="flex flex-col sm:flex-row gap-3 mb-4">
-          <div className="relative flex-1">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-gray" />
-            <input
-              type="text"
-              placeholder="Search items by name, category, room, or vendor..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full bg-transparent border border-light-gray text-charcoal text-xs px-3 py-2.5 pl-9 outline-none focus:border-charcoal/40 transition-colors"
-            />
-          </div>
-          <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} className="border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none bg-white">
-            <option value="all">All Categories</option>
-            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none bg-white">
-            <option value="all">All Statuses</option>
-            <option value="ok">OK</option>
-            <option value="low_stock">Low Stock</option>
-            <option value="missing">Missing</option>
-            <option value="damaged">Damaged</option>
-            <option value="replace_soon">Replace Soon</option>
-          </select>
-          {mainTab === "all" && (
-            <select value={roomFilter} onChange={e => setRoomFilter(e.target.value)} className="border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none bg-white">
-              <option value="all">All Rooms</option>
-              {rooms.map(r => <option key={r.id} value={r.id}>{r.roomName}</option>)}
-              <option value="unassigned">Unassigned</option>
-            </select>
-          )}
-        </div>
-      )}
 
       {/* ═══════════════════════════════════════════════════════════════ */}
       {/* ROOM-BASED VIEW                                                */}
       {/* ═══════════════════════════════════════════════════════════════ */}
-      {mainTab === "rooms" && (
+      {mainTab === "rooms" && (() => {
+        const FLOOR_LABELS_ITEMS: Record<number, string> = { 1: "1st Floor", 2: "2nd Floor", 3: "3rd Floor" };
+        const floorLabelItems = (f: number) => FLOOR_LABELS_ITEMS[f] || `${f}th Floor`;
+
+        const activeItemPropertyId = itemPropertyTab || (listings.length > 0 ? listings[0].id : "");
+        const activeItemListing = listings.find(l => l.id === activeItemPropertyId);
+
+        const propertyRoomsForItems = rooms.filter(r => r.propertyId === activeItemPropertyId && r.isActive);
+        const propertyFloors = [...new Set(propertyRoomsForItems.map(r => r.floor ?? 1))].sort((a, b) => a - b);
+
+        const allPropertyItems = filteredItems.filter(i => i.propertyId === activeItemPropertyId);
+        const selectedRoomItems = itemRoomTab === "all"
+          ? allPropertyItems
+          : itemRoomTab === "unassigned"
+            ? allPropertyItems.filter(i => !i.roomId)
+            : allPropertyItems.filter(i => i.roomId === itemRoomTab);
+
+        const selectedRoomValue = selectedRoomItems.reduce((s, i) => s + i.quantityOnHand * i.unitCost, 0);
+        const selectedRoomRecord = itemRoomTab !== "all" && itemRoomTab !== "unassigned" ? rooms.find(r => r.id === itemRoomTab) : null;
+        const unassignedCount = allPropertyItems.filter(i => !i.roomId).length;
+
+        const roomViewColumns: DataTableColumn<PropertyInventoryItem>[] = [
+          {
+            key: "itemName",
+            label: "Item",
+            accessor: i => i.itemName,
+            render: i => (
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-charcoal">{i.itemName}</span>
+                {i.guestVisible && <Eye size={10} className="text-warm-gray shrink-0" />}
+                {i.cleanerCheckRequired && <ClipboardCheck size={10} className="text-warm-gray shrink-0" />}
+              </div>
+            ),
+          },
+          // Room column only in All Rooms view
+          ...(itemRoomTab === "all"
+            ? [{
+                key: "room",
+                label: "Room",
+                accessor: (i: PropertyInventoryItem) => roomName(i.roomId),
+                render: (i: PropertyInventoryItem) => <span className="text-warm-gray">{roomName(i.roomId)}</span>,
+                responsiveClass: "hidden md:table-cell",
+              } as DataTableColumn<PropertyInventoryItem>]
+            : []),
+          {
+            key: "category",
+            label: "Category",
+            accessor: i => i.category,
+            render: i => <span className="text-warm-gray">{i.category}</span>,
+            responsiveClass: "hidden md:table-cell",
+          },
+          {
+            key: "quantityExpected",
+            label: "Expected",
+            accessor: i => i.quantityExpected,
+            className: "text-center",
+            render: i => <span className="text-charcoal">{i.quantityExpected}</span>,
+          },
+          {
+            key: "quantityOnHand",
+            label: "On Hand",
+            accessor: i => i.quantityOnHand,
+            className: "text-center",
+            render: i => (
+              <span className={`font-medium ${i.quantityOnHand < i.quantityExpected ? "text-red-600" : "text-charcoal"}`}>{i.quantityOnHand}</span>
+            ),
+          },
+          {
+            key: "reorderThreshold",
+            label: "Reorder",
+            accessor: i => i.reorderThreshold,
+            className: "text-center",
+            render: i => <span className="text-warm-gray">{i.reorderThreshold}</span>,
+            responsiveClass: "hidden lg:table-cell",
+          },
+          {
+            key: "conditionStatus",
+            label: "Condition",
+            accessor: i => i.conditionStatus,
+            render: i => <Badge className={CONDITION_COLORS[i.conditionStatus] || "text-gray-500 bg-gray-100"}>{i.conditionStatus}</Badge>,
+            responsiveClass: "hidden md:table-cell",
+          },
+          {
+            key: "inventoryStatus",
+            label: "Status",
+            accessor: i => i.inventoryStatus,
+            render: i => <Badge className={STATUS_COLORS[i.inventoryStatus] || "text-gray-500 bg-gray-100"}>{statusLabel(i.inventoryStatus)}</Badge>,
+          },
+          {
+            key: "unitCost",
+            label: "Unit Cost",
+            accessor: i => i.unitCost,
+            className: "text-right",
+            render: i => <span className="text-charcoal">{formatCurrencyDecimal(i.unitCost)}</span>,
+            responsiveClass: "hidden lg:table-cell",
+          },
+          {
+            key: "value",
+            label: "Value",
+            accessor: i => i.quantityOnHand * i.unitCost,
+            className: "text-right",
+            render: i => <span className="text-charcoal">{formatCurrency(i.quantityOnHand * i.unitCost)}</span>,
+            responsiveClass: "hidden xl:table-cell",
+          },
+          {
+            key: "actions",
+            label: "Actions",
+            sortable: false,
+            className: "text-right",
+            headerClassName: "text-right",
+            render: i => (
+              <button onClick={e => { e.stopPropagation(); openItem(i); }} className="text-charcoal hover:bg-cream p-1 transition" title="View Details">
+                <Eye size={14} />
+              </button>
+            ),
+          },
+        ];
+
+        return (
         <>
-          {sortedRoomKeys.length === 0 && filteredItems.length === 0 ? (
+          {/* Property sub-tabs */}
+          <div className="flex items-center gap-0 border-b border-light-gray mb-4">
+            {listings.map(listing => {
+              const count = items.filter(i => !i.archivedAt && i.propertyId === listing.id).length;
+              const isActive = listing.id === activeItemPropertyId;
+              return (
+                <button
+                  key={listing.id}
+                  onClick={() => { setItemPropertyTab(listing.id); setItemRoomTab("all"); }}
+                  className={`flex items-center gap-2 px-5 py-3 text-xs font-medium transition border-b-2 -mb-px ${isActive ? "border-charcoal text-charcoal" : "border-transparent text-warm-gray hover:text-charcoal hover:border-warm-gray/30"}`}
+                >
+                  <Home size={13} />
+                  <span>{listing.title}</span>
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${isActive ? "bg-charcoal text-white" : "bg-light-gray text-warm-gray"}`}>{count}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Room pills grouped by floor */}
+          <div className="bg-white border border-light-gray p-3 mb-4 space-y-2">
+            {propertyFloors.map(floor => {
+              const floorRooms = propertyRoomsForItems
+                .filter(r => (r.floor ?? 1) === floor)
+                .sort((a, b) => a.displayOrder - b.displayOrder || a.roomName.localeCompare(b.roomName));
+              return (
+                <div key={floor} className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[9px] tracking-[0.12em] uppercase text-warm-gray font-medium w-16 shrink-0 flex items-center gap-1">
+                    <Layers size={10} /> {floorLabelItems(floor)}
+                  </span>
+                  {floor === propertyFloors[0] && (
+                    <button
+                      onClick={() => setItemRoomTab("all")}
+                      className={`text-[10px] px-3 py-1.5 border transition font-medium ${itemRoomTab === "all" ? "bg-charcoal text-white border-charcoal" : "border-light-gray text-charcoal hover:bg-cream"}`}
+                    >
+                      All Rooms ({allPropertyItems.length})
+                    </button>
+                  )}
+                  {floorRooms.map(r => {
+                    const count = allPropertyItems.filter(i => i.roomId === r.id).length;
+                    const isActive = itemRoomTab === r.id;
+                    return (
+                      <button
+                        key={r.id}
+                        onClick={() => setItemRoomTab(r.id)}
+                        className={`text-[10px] px-3 py-1.5 border transition ${isActive ? "bg-charcoal text-white border-charcoal" : "border-light-gray text-charcoal/70 hover:bg-cream hover:text-charcoal"}`}
+                      >
+                        {r.roomName} {count > 0 && <span className={`ml-1 ${isActive ? "text-white/70" : "text-warm-gray"}`}>({count})</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
+            {unassignedCount > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="w-16 shrink-0" />
+                <button
+                  onClick={() => setItemRoomTab("unassigned")}
+                  className={`text-[10px] px-3 py-1.5 border transition ${itemRoomTab === "unassigned" ? "bg-charcoal text-white border-charcoal" : "border-light-gray text-warm-gray hover:bg-cream"}`}
+                >
+                  Unassigned ({unassignedCount})
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Room summary bar */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <h3 className="text-sm font-medium text-charcoal">
+                {itemRoomTab === "all" ? `All Items — ${activeItemListing?.title || ""}` : itemRoomTab === "unassigned" ? "Unassigned Items" : selectedRoomRecord?.roomName || ""}
+              </h3>
+              {selectedRoomRecord && (
+                <span className="text-[10px] text-warm-gray">{selectedRoomRecord.roomType} · {floorLabelItems(selectedRoomRecord.floor ?? 1)}</span>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] text-warm-gray">{selectedRoomItems.length} items · {formatCurrency(selectedRoomValue)}</span>
+              <button
+                onClick={e => { e.stopPropagation(); setNewItem(prev => ({ ...prev, propertyId: activeItemPropertyId, roomId: itemRoomTab === "all" || itemRoomTab === "unassigned" ? "" : itemRoomTab })); setShowAddItem(true); }}
+                className="text-[10px] text-charcoal border border-light-gray px-2.5 py-1.5 hover:bg-cream transition flex items-center gap-1"
+              >
+                <Plus size={10} /> Add Item
+              </button>
+            </div>
+          </div>
+
+          {/* Single items table */}
+          {selectedRoomItems.length === 0 ? (
             <div className="bg-white border border-light-gray p-12 text-center">
               <Package size={24} className="mx-auto mb-3 text-warm-gray/50" />
-              <p className="text-sm text-charcoal mb-1">No inventory items yet</p>
-              <p className="text-xs text-warm-gray mb-4">Start by adding rooms and inventory items to track supplies across your properties.</p>
-              <div className="flex justify-center gap-2">
-                <button onClick={() => setShowAddRoom(true)} className="bg-charcoal text-white text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-stone transition px-4 py-2.5">Add Room</button>
-                <button onClick={() => setShowAddItem(true)} className="border border-light-gray text-charcoal text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-cream transition px-4 py-2.5">Add Item</button>
-              </div>
+              <p className="text-sm text-charcoal mb-1">{itemRoomTab === "all" ? "No inventory items yet" : "No items in this room"}</p>
+              <p className="text-xs text-warm-gray mb-4">{itemRoomTab === "all" ? "Start by adding inventory items to track supplies." : "Add items to this room to start tracking."}</p>
+              <button onClick={() => { setNewItem(prev => ({ ...prev, propertyId: activeItemPropertyId, roomId: itemRoomTab === "all" || itemRoomTab === "unassigned" ? "" : itemRoomTab })); setShowAddItem(true); }} className="bg-charcoal text-white text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-stone transition px-4 py-2.5">Add Item</button>
             </div>
           ) : (
-            <div className="space-y-4">
-              {sortedRoomKeys.map(roomId => {
-                const roomItems = itemsByRoom.get(roomId) || [];
-                const rName = roomId === "unassigned" ? "Unassigned" : roomName(roomId);
-                const roomValue = roomItems.reduce((s, i) => s + i.quantityOnHand * (i.avgUnitCost || i.unitCost), 0);
-                const roomLow = roomItems.filter(i => i.inventoryStatus === "low_stock" || i.inventoryStatus === "missing").length;
-                const isCollapsed = collapsedRooms.has(roomId);
-
-                return (
-                  <div key={roomId} className="bg-white border border-light-gray">
-                    {/* Room Header */}
-                    <div
-                      className="flex items-center justify-between p-4 cursor-pointer hover:bg-cream/30 transition"
-                      onClick={() => toggleRoom(roomId)}
-                    >
-                      <div className="flex items-center gap-3">
-                        {isCollapsed ? <ChevronRight size={14} className="text-warm-gray" /> : <ChevronDown size={14} className="text-warm-gray" />}
-                        <div>
-                          <h3 className="text-sm font-medium text-charcoal">{rName}</h3>
-                          <div className="flex items-center gap-3 mt-0.5">
-                            <span className="text-[10px] text-warm-gray">{roomItems.length} items</span>
-                            <span className="text-[10px] text-warm-gray">{formatCurrency(roomValue)}</span>
-                            {roomLow > 0 && <Badge className="text-amber-700 bg-amber-50">{roomLow} low</Badge>}
-                          </div>
-                        </div>
-                      </div>
-                      <button
-                        onClick={e => { e.stopPropagation(); setNewItem(prev => ({ ...prev, propertyId: listings[0]?.id || "", roomId: roomId === "unassigned" ? "" : roomId })); setShowAddItem(true); }}
-                        className="text-[10px] text-charcoal border border-light-gray px-2 py-1 hover:bg-cream transition flex items-center gap-1"
-                      >
-                        <Plus size={10} /> Add
-                      </button>
-                    </div>
-
-                    {/* Room Items Table */}
-                    {!isCollapsed && roomItems.length > 0 && (
-                      <div className="overflow-x-auto border-t border-light-gray">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="border-b border-light-gray/50">
-                              <th className="text-left px-4 py-2.5 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Item</th>
-                              <th className="text-left px-3 py-2.5 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium hidden md:table-cell">Category</th>
-                              <th className="text-center px-3 py-2.5 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Expected</th>
-                              <th className="text-center px-3 py-2.5 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">On Hand</th>
-                              <th className="text-center px-3 py-2.5 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium hidden lg:table-cell">Reorder</th>
-                              <th className="text-left px-3 py-2.5 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium hidden md:table-cell">Condition</th>
-                              <th className="text-left px-3 py-2.5 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Status</th>
-                              <th className="text-right px-3 py-2.5 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium hidden lg:table-cell">Unit Cost</th>
-                              <th className="text-right px-3 py-2.5 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium hidden xl:table-cell">Value</th>
-                              <th className="text-left px-3 py-2.5 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium hidden xl:table-cell">Checked</th>
-                              <th className="text-right px-4 py-2.5 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {roomItems.map(item => (
-                              <tr key={item.id} className="border-b border-light-gray/30 hover:bg-cream/30 transition cursor-pointer" onClick={() => openItem(item)}>
-                                <td className="px-4 py-2.5">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-medium text-charcoal">{item.itemName}</span>
-                                    {item.guestVisible && <Eye size={10} className="text-warm-gray shrink-0" />}
-                                    {item.cleanerCheckRequired && <ClipboardCheck size={10} className="text-warm-gray shrink-0" />}
-                                  </div>
-                                </td>
-                                <td className="px-3 py-2.5 text-warm-gray hidden md:table-cell">{item.category}</td>
-                                <td className="px-3 py-2.5 text-center text-charcoal">{item.quantityExpected}</td>
-                                <td className={`px-3 py-2.5 text-center font-medium ${item.quantityOnHand < item.quantityExpected ? "text-red-600" : "text-charcoal"}`}>
-                                  {item.quantityOnHand}
-                                </td>
-                                <td className="px-3 py-2.5 text-center text-warm-gray hidden lg:table-cell">{item.reorderThreshold}</td>
-                                <td className="px-3 py-2.5 hidden md:table-cell">
-                                  <Badge className={CONDITION_COLORS[item.conditionStatus] || "text-gray-500 bg-gray-100"}>{item.conditionStatus}</Badge>
-                                </td>
-                                <td className="px-3 py-2.5">
-                                  <Badge className={STATUS_COLORS[item.inventoryStatus] || "text-gray-500 bg-gray-100"}>{statusLabel(item.inventoryStatus)}</Badge>
-                                </td>
-                                <td className="px-3 py-2.5 text-right text-charcoal hidden lg:table-cell">{formatCurrencyDecimal(item.unitCost)}</td>
-                                <td className="px-3 py-2.5 text-right text-charcoal hidden xl:table-cell">{formatCurrency(item.quantityOnHand * (item.avgUnitCost || item.unitCost))}</td>
-                                <td className="px-3 py-2.5 text-warm-gray hidden xl:table-cell">{formatDate(item.lastCheckedAt)}</td>
-                                <td className="px-4 py-2.5 text-right">
-                                  <button onClick={e => { e.stopPropagation(); openItem(item); }} className="text-charcoal hover:bg-cream p-1 transition" title="View Details">
-                                    <Eye size={14} />
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+            <DataTable
+              columns={roomViewColumns}
+              rows={selectedRoomItems}
+              rowKey={i => i.id}
+              filters={itemFilters}
+              searchPlaceholder="Search items by name, category, or room..."
+              onRowClick={openItem}
+              defaultSort={{ key: "itemName", dir: "asc" }}
+              emptyMessage="No items match your filters."
+            />
           )}
-          <p className="text-[10px] text-warm-gray mt-2">{filteredItems.length} items across {sortedRoomKeys.length} rooms</p>
         </>
-      )}
+        );
+      })()}
 
       {/* ═══════════════════════════════════════════════════════════════ */}
       {/* ALL ITEMS VIEW                                                 */}
       {/* ═══════════════════════════════════════════════════════════════ */}
       {mainTab === "all" && (
-        <>
-          <div className="bg-white border border-light-gray overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-light-gray">
-                  <th className="text-left px-4 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Item</th>
-                  <th className="text-left px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium hidden md:table-cell">Room</th>
-                  <th className="text-left px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium hidden md:table-cell">Category</th>
-                  <th className="text-center px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Qty</th>
-                  <th className="text-left px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Status</th>
-                  <th className="text-left px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium hidden lg:table-cell">Condition</th>
-                  <th className="text-right px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium hidden lg:table-cell">Cost</th>
-                  <th className="text-right px-4 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredItems.length === 0 ? (
-                  <tr><td colSpan={8} className="text-center py-12 text-warm-gray">No items match your filters.</td></tr>
-                ) : filteredItems.map(item => (
-                  <tr key={item.id} className="border-b border-light-gray/50 hover:bg-cream/30 transition cursor-pointer" onClick={() => openItem(item)}>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-charcoal">{item.itemName}</span>
-                        {item.guestVisible && <Eye size={10} className="text-warm-gray" />}
-                      </div>
-                      <p className="text-[10px] text-warm-gray">{ITEM_TYPE_LABELS[item.itemType] || item.itemType}</p>
-                    </td>
-                    <td className="px-3 py-3 text-warm-gray hidden md:table-cell">{roomName(item.roomId)}</td>
-                    <td className="px-3 py-3 text-warm-gray hidden md:table-cell">{item.category}</td>
-                    <td className={`px-3 py-3 text-center font-medium ${item.quantityOnHand < item.quantityExpected ? "text-red-600" : "text-charcoal"}`}>
-                      {item.quantityOnHand}/{item.quantityExpected}
-                    </td>
-                    <td className="px-3 py-3"><Badge className={STATUS_COLORS[item.inventoryStatus] || "text-gray-500 bg-gray-100"}>{statusLabel(item.inventoryStatus)}</Badge></td>
-                    <td className="px-3 py-3 hidden lg:table-cell"><Badge className={CONDITION_COLORS[item.conditionStatus] || "text-gray-500 bg-gray-100"}>{item.conditionStatus}</Badge></td>
-                    <td className="px-3 py-3 text-right text-charcoal hidden lg:table-cell">{formatCurrencyDecimal(item.unitCost)}</td>
-                    <td className="px-4 py-3 text-right">
-                      <button onClick={e => { e.stopPropagation(); openItem(item); }} className="text-charcoal hover:bg-cream p-1 transition"><Eye size={14} /></button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="text-[10px] text-warm-gray mt-2">{filteredItems.length} items</p>
-        </>
+        <DataTable
+          columns={allItemsColumns}
+          rows={filteredItems}
+          rowKey={i => i.id}
+          filters={[...itemFilters, roomFilterDef]}
+          searchPlaceholder="Search items by name, category, or room..."
+          onRowClick={openItem}
+          defaultSort={{ key: "itemName", dir: "asc" }}
+          emptyMessage="No items match your filters."
+        />
       )}
 
       {/* ═══════════════════════════════════════════════════════════════ */}
@@ -852,50 +985,87 @@ export default function InventoryManagementPage() {
               <p className="text-xs text-warm-gray">No items are below their reorder threshold.</p>
             </div>
           ) : (
-            <div className="bg-white border border-light-gray overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-light-gray">
-                    <th className="text-left px-4 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Item</th>
-                    <th className="text-left px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium hidden md:table-cell">Room</th>
-                    <th className="text-center px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Current</th>
-                    <th className="text-center px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Reorder At</th>
-                    <th className="text-center px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Needed</th>
-                    <th className="text-right px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium hidden lg:table-cell">Est. Cost</th>
-                    <th className="text-left px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium hidden lg:table-cell">Vendor</th>
-                    <th className="text-right px-4 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lowStockItems.map(item => {
-                    const needed = Math.max(1, item.quantityExpected - item.quantityOnHand);
-                    const estCost = needed * (item.replacementCost || item.unitCost);
+            <DataTable
+              columns={[
+                {
+                  key: "itemName",
+                  label: "Item",
+                  accessor: i => i.itemName,
+                  render: i => (
+                    <>
+                      <span className="font-medium text-charcoal">{i.itemName}</span>
+                      <p className="text-[10px] text-warm-gray">{i.category}</p>
+                    </>
+                  ),
+                },
+                {
+                  key: "room",
+                  label: "Room",
+                  accessor: i => roomName(i.roomId),
+                  render: i => <span className="text-warm-gray">{roomName(i.roomId)}</span>,
+                  responsiveClass: "hidden md:table-cell",
+                },
+                {
+                  key: "current",
+                  label: "Current",
+                  accessor: i => i.quantityOnHand,
+                  className: "text-center",
+                  render: i => <span className="text-red-600 font-medium">{i.quantityOnHand}</span>,
+                },
+                {
+                  key: "reorderThreshold",
+                  label: "Reorder At",
+                  accessor: i => i.reorderThreshold,
+                  className: "text-center",
+                  render: i => <span className="text-warm-gray">{i.reorderThreshold}</span>,
+                },
+                {
+                  key: "needed",
+                  label: "Needed",
+                  accessor: i => Math.max(1, i.quantityExpected - i.quantityOnHand),
+                  className: "text-center",
+                  render: i => <span className="text-charcoal font-medium">{Math.max(1, i.quantityExpected - i.quantityOnHand)}</span>,
+                },
+                {
+                  key: "estCost",
+                  label: "Est. Cost",
+                  accessor: i => Math.max(1, i.quantityExpected - i.quantityOnHand) * (i.replacementCost || i.unitCost),
+                  className: "text-right",
+                  render: i => <span className="text-charcoal">{formatCurrencyDecimal(Math.max(1, i.quantityExpected - i.quantityOnHand) * (i.replacementCost || i.unitCost))}</span>,
+                  responsiveClass: "hidden lg:table-cell",
+                },
+                {
+                  key: "vendor",
+                  label: "Vendor",
+                  accessor: i => i.vendor?.vendorName || "—",
+                  render: i => <span className="text-warm-gray">{i.vendor?.vendorName || "—"}</span>,
+                  responsiveClass: "hidden lg:table-cell",
+                },
+                {
+                  key: "action",
+                  label: "Action",
+                  sortable: false,
+                  className: "text-right",
+                  headerClassName: "text-right",
+                  render: i => {
+                    const needed = Math.max(1, i.quantityExpected - i.quantityOnHand);
                     return (
-                      <tr key={item.id} className="border-b border-light-gray/50 hover:bg-cream/30 transition">
-                        <td className="px-4 py-3">
-                          <span className="font-medium text-charcoal">{item.itemName}</span>
-                          <p className="text-[10px] text-warm-gray">{item.category}</p>
-                        </td>
-                        <td className="px-3 py-3 text-warm-gray hidden md:table-cell">{roomName(item.roomId)}</td>
-                        <td className="px-3 py-3 text-center text-red-600 font-medium">{item.quantityOnHand}</td>
-                        <td className="px-3 py-3 text-center text-warm-gray">{item.reorderThreshold}</td>
-                        <td className="px-3 py-3 text-center text-charcoal font-medium">{needed}</td>
-                        <td className="px-3 py-3 text-right text-charcoal hidden lg:table-cell">{formatCurrencyDecimal(estCost)}</td>
-                        <td className="px-3 py-3 text-warm-gray hidden lg:table-cell">{item.vendor?.vendorName || "—"}</td>
-                        <td className="px-4 py-3 text-right">
-                          <button
-                            onClick={() => { setRestockForm({ itemId: item.id, quantityAdded: needed, unitCost: item.replacementCost || item.unitCost, vendorId: item.vendorId || "", receiptUrl: "", notes: "" }); setShowRestock(true); }}
-                            className="bg-charcoal text-white text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-stone transition px-3 py-1.5"
-                          >
-                            Restock
-                          </button>
-                        </td>
-                      </tr>
+                      <button
+                        onClick={e => { e.stopPropagation(); setRestockForm({ itemId: i.id, quantityAdded: needed, unitCost: i.replacementCost || i.unitCost, vendorId: i.vendorId || "", receiptUrl: "", notes: "" }); setShowRestock(true); }}
+                        className="bg-charcoal text-white text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-stone transition px-3 py-1.5"
+                      >
+                        Restock
+                      </button>
                     );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                  },
+                },
+              ] satisfies DataTableColumn<PropertyInventoryItem>[]}
+              rows={lowStockItems}
+              rowKey={i => i.id}
+              searchPlaceholder="Search restock items..."
+              defaultSort={{ key: "itemName", dir: "asc" }}
+              emptyMessage="No items are below their reorder threshold."
+            />
           )}
 
           {lowStockItems.length > 0 && (
@@ -955,6 +1125,205 @@ export default function InventoryManagementPage() {
           )}
         </>
       )}
+
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {/* MANAGE ROOMS TAB                                                */}
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {mainTab === "manage-rooms" && (() => {
+        const FLOOR_LABELS: Record<number, string> = { 1: "1st Floor", 2: "2nd Floor", 3: "3rd Floor" };
+        const floorLabel = (f: number) => FLOOR_LABELS[f] || `${f}th Floor`;
+        const ROOM_TYPES = ["bedroom", "bathroom", "kitchen", "living", "dining", "laundry", "outdoor", "storage", "safety", "other"];
+
+        const activePropertyId = roomPropertyTab || (listings.length > 0 ? listings[0].id : "");
+        const activeListing = listings.find(l => l.id === activePropertyId);
+
+        const propertyRooms = rooms.filter(r => r.propertyId === activePropertyId);
+        const allFloors = [...new Set(propertyRooms.map(r => r.floor ?? 1))].sort((a, b) => a - b);
+
+        const roomColumns: DataTableColumn<InventoryRoomRecord>[] = [
+          {
+            key: "roomName",
+            label: "Room Name",
+            accessor: r => r.roomName,
+            render: r => editingRoom?.id === r.id ? (
+              <input
+                value={editRoomForm.roomName}
+                onChange={e => setEditRoomForm(p => ({ ...p, roomName: e.target.value }))}
+                onClick={e => e.stopPropagation()}
+                className="w-full border border-light-gray text-charcoal text-xs px-2 py-1.5 outline-none focus:border-charcoal/40"
+              />
+            ) : <span className="text-charcoal font-medium">{r.roomName}</span>,
+          },
+          {
+            key: "roomType",
+            label: "Type",
+            accessor: r => r.roomType,
+            render: r => editingRoom?.id === r.id ? (
+              <select
+                value={editRoomForm.roomType}
+                onChange={e => setEditRoomForm(p => ({ ...p, roomType: e.target.value }))}
+                onClick={e => e.stopPropagation()}
+                className="border border-light-gray text-charcoal text-xs px-2 py-1.5 outline-none bg-white"
+              >
+                {ROOM_TYPES.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+              </select>
+            ) : <span className="text-warm-gray capitalize">{r.roomType}</span>,
+          },
+          {
+            key: "floor",
+            label: "Floor",
+            accessor: r => r.floor ?? 1,
+            render: r => editingRoom?.id === r.id ? (
+              <select
+                value={editRoomForm.floor}
+                onChange={e => setEditRoomForm(p => ({ ...p, floor: Number(e.target.value) }))}
+                onClick={e => e.stopPropagation()}
+                className="border border-light-gray text-charcoal text-xs px-2 py-1.5 outline-none bg-white w-16"
+              >
+                {[1, 2, 3, 4, 5].map(f => <option key={f} value={f}>{f}</option>)}
+              </select>
+            ) : <span className="text-warm-gray">{floorLabel(r.floor ?? 1)}</span>,
+          },
+          {
+            key: "items",
+            label: "Items",
+            accessor: r => items.filter(i => i.roomId === r.id).length,
+            render: r => {
+              const count = items.filter(i => i.roomId === r.id).length;
+              return count > 0 ? <span className="text-charcoal">{count}</span> : <span className="text-warm-gray/50">0</span>;
+            },
+          },
+          {
+            key: "notes",
+            label: "Notes",
+            accessor: r => r.notes || "",
+            responsiveClass: "hidden sm:table-cell",
+            render: r => editingRoom?.id === r.id ? (
+              <input
+                value={editRoomForm.notes}
+                onChange={e => setEditRoomForm(p => ({ ...p, notes: e.target.value }))}
+                onClick={e => e.stopPropagation()}
+                className="w-full border border-light-gray text-charcoal text-xs px-2 py-1.5 outline-none focus:border-charcoal/40"
+                placeholder="Notes..."
+              />
+            ) : <span className="text-warm-gray block truncate max-w-[200px]">{r.notes || "—"}</span>,
+          },
+          {
+            key: "status",
+            label: "Status",
+            accessor: r => (r.isActive ? "Active" : "Inactive"),
+            responsiveClass: "hidden md:table-cell",
+            render: r => (
+              <Badge className={r.isActive ? "text-emerald-700 bg-emerald-50" : "text-warm-gray bg-gray-100"}>
+                {r.isActive ? "Active" : "Inactive"}
+              </Badge>
+            ),
+          },
+          {
+            key: "actions",
+            label: "Actions",
+            sortable: false,
+            className: "text-right",
+            headerClassName: "text-right",
+            render: r => editingRoom?.id === r.id ? (
+              <div className="flex items-center justify-end gap-1">
+                <button onClick={e => { e.stopPropagation(); updateRoom(r.id); }} disabled={saving || !editRoomForm.roomName} className="text-emerald-600 hover:bg-emerald-50 p-1.5 transition disabled:opacity-50" title="Save">
+                  <CheckCircle size={14} />
+                </button>
+                <button onClick={e => { e.stopPropagation(); setEditingRoom(null); }} className="text-warm-gray hover:bg-cream p-1.5 transition" title="Cancel">
+                  <X size={14} />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-end gap-1">
+                <button
+                  onClick={e => {
+                    e.stopPropagation();
+                    setEditingRoom(r);
+                    setEditRoomForm({ roomName: r.roomName, roomType: r.roomType, floor: r.floor ?? 1, notes: r.notes || "" });
+                  }}
+                  className="text-charcoal hover:bg-cream p-1.5 transition"
+                  title="Edit"
+                >
+                  <Edit3 size={13} />
+                </button>
+                <button onClick={e => { e.stopPropagation(); deleteRoom(r); }} className="text-red-500 hover:bg-red-50 p-1.5 transition" title="Delete">
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ),
+          },
+        ];
+
+        const roomTableFilters: DataTableFilter<InventoryRoomRecord>[] = [
+          {
+            key: "type",
+            label: "Type",
+            options: ROOM_TYPES.map(t => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) })),
+            match: (r, v) => r.roomType === v,
+          },
+          {
+            key: "floor",
+            label: "Floor",
+            options: allFloors.map(f => ({ value: String(f), label: floorLabel(f) })),
+            match: (r, v) => (r.floor ?? 1) === Number(v),
+          },
+        ];
+
+        return (
+        <>
+          {/* Property sub-tabs */}
+          <div className="flex items-center gap-0 border-b border-light-gray mb-5">
+            {listings.map(listing => {
+              const count = rooms.filter(r => r.propertyId === listing.id).length;
+              const isActive = listing.id === activePropertyId;
+              return (
+                <button
+                  key={listing.id}
+                  onClick={() => { setRoomPropertyTab(listing.id); setEditingRoom(null); }}
+                  className={`flex items-center gap-2 px-5 py-3 text-xs font-medium transition border-b-2 -mb-px ${isActive ? "border-charcoal text-charcoal" : "border-transparent text-warm-gray hover:text-charcoal hover:border-warm-gray/30"}`}
+                >
+                  <Home size={13} />
+                  <span>{listing.title}</span>
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${isActive ? "bg-charcoal text-white" : "bg-light-gray text-warm-gray"}`}>{count}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Property summary line */}
+          {activeListing && (
+            <p className="text-xs text-warm-gray mb-4">
+              {propertyRooms.length} rooms · {allFloors.length} {allFloors.length === 1 ? "floor" : "floors"}
+            </p>
+          )}
+
+          {propertyRooms.length === 0 ? (
+            <div className="bg-white border border-light-gray p-12 text-center">
+              <Home size={24} className="mx-auto mb-3 text-warm-gray/50" />
+              <p className="text-sm text-charcoal mb-1">No rooms configured for {activeListing?.title || "this property"}</p>
+              <p className="text-xs text-warm-gray mb-4">Add rooms to organize inventory by location within this property.</p>
+              <button onClick={() => setShowAddRoom(true)} className="bg-charcoal text-white text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-stone transition px-4 py-2.5">Add Room</button>
+            </div>
+          ) : (
+            <DataTable
+              columns={roomColumns}
+              rows={propertyRooms}
+              rowKey={r => r.id}
+              filters={roomTableFilters}
+              searchPlaceholder="Search rooms by name, type, or notes..."
+              defaultSort={{ key: "floor", dir: "asc" }}
+              emptyMessage="No rooms match your search or filters."
+              toolbar={
+                <button onClick={() => setShowAddRoom(true)} className="bg-charcoal text-white text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-stone transition px-3 py-2 flex items-center gap-1.5">
+                  <Plus size={11} /> Add Room
+                </button>
+              }
+            />
+          )}
+        </>
+        );
+      })()}
 
       {/* ═══════════════════════════════════════════════════════════════ */}
       {/* ITEM DETAIL DRAWER                                             */}
@@ -1093,8 +1462,8 @@ export default function InventoryManagementPage() {
                   </div>
                   <div className="bg-cream/50 border border-light-gray p-4">
                     <h3 className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium mb-2">Remaining Inventory Value</h3>
-                    <p className="text-xl font-serif text-charcoal">{formatCurrency(selectedItem.quantityOnHand * (selectedItem.avgUnitCost || selectedItem.unitCost))}</p>
-                    <p className="text-[10px] text-warm-gray mt-1">{selectedItem.quantityOnHand} × {formatCurrencyDecimal(selectedItem.avgUnitCost || selectedItem.unitCost)}</p>
+                    <p className="text-xl font-serif text-charcoal">{formatCurrency(selectedItem.quantityOnHand * selectedItem.unitCost)}</p>
+                    <p className="text-[10px] text-warm-gray mt-1">{selectedItem.quantityOnHand} × {formatCurrencyDecimal(selectedItem.unitCost)}</p>
                   </div>
                   {selectedItem.receiptUrl && (
                     <div className="bg-cream/50 border border-light-gray p-4">
@@ -1159,7 +1528,7 @@ export default function InventoryManagementPage() {
             <div className="p-4 space-y-4">
               <div>
                 <label className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block mb-1">Property *</label>
-                <select value={newItem.propertyId} onChange={e => setNewItem(p => ({ ...p, propertyId: e.target.value }))} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none bg-white">
+                <select value={newItem.propertyId} onChange={e => setNewItem(p => ({ ...p, propertyId: e.target.value, roomId: "" }))} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none bg-white">
                   <option value="">Select property...</option>
                   {listings.map(l => <option key={l.id} value={l.id}>{l.title}</option>)}
                 </select>
@@ -1168,7 +1537,20 @@ export default function InventoryManagementPage() {
                 <label className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block mb-1">Room</label>
                 <select value={newItem.roomId} onChange={e => setNewItem(p => ({ ...p, roomId: e.target.value }))} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none bg-white">
                   <option value="">No room assigned</option>
-                  {rooms.map(r => <option key={r.id} value={r.id}>{r.roomName}</option>)}
+                  {(() => {
+                    const FLOOR_LABELS: Record<number, string> = { 1: "1st Floor", 2: "2nd Floor", 3: "3rd Floor" };
+                    const floorLabel = (f: number) => FLOOR_LABELS[f] || `${f}th Floor`;
+                    const propertyRooms = rooms.filter(r => r.propertyId === newItem.propertyId);
+                    const floors = [...new Set(propertyRooms.map(r => r.floor ?? 1))].sort((a, b) => a - b);
+                    return floors.map(f => {
+                      const floorRooms = propertyRooms.filter(r => (r.floor ?? 1) === f).sort((a, b) => a.displayOrder - b.displayOrder);
+                      return (
+                        <optgroup key={f} label={floorLabel(f)}>
+                          {floorRooms.map(r => <option key={r.id} value={r.id}>{r.roomName}</option>)}
+                        </optgroup>
+                      );
+                    });
+                  })()}
                 </select>
               </div>
               <div>
@@ -1210,11 +1592,11 @@ export default function InventoryManagementPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block mb-1">Unit Cost ($)</label>
-                  <input type="number" min={0} step="0.01" value={newItem.unitCost} onChange={e => setNewItem(p => ({ ...p, unitCost: Number(e.target.value) }))} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none focus:border-charcoal/40" />
+                  <input type="number" min={0} step="0.01" value={newItem.unitCost || ""} onChange={e => setNewItem(p => ({ ...p, unitCost: Number(e.target.value) }))} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none focus:border-charcoal/40" placeholder="0.00" />
                 </div>
                 <div>
                   <label className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block mb-1">Replacement Cost ($)</label>
-                  <input type="number" min={0} step="0.01" value={newItem.replacementCost} onChange={e => setNewItem(p => ({ ...p, replacementCost: Number(e.target.value) }))} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none focus:border-charcoal/40" />
+                  <input type="number" min={0} step="0.01" value={newItem.replacementCost || ""} onChange={e => setNewItem(p => ({ ...p, replacementCost: Number(e.target.value) }))} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none focus:border-charcoal/40" placeholder="0.00" />
                 </div>
               </div>
               <div>
@@ -1302,6 +1684,16 @@ export default function InventoryManagementPage() {
                 </select>
               </div>
               <div>
+                <label className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block mb-1">Floor</label>
+                <select value={newRoom.floor} onChange={e => setNewRoom(p => ({ ...p, floor: Number(e.target.value) }))} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none bg-white">
+                  <option value={1}>1st Floor</option>
+                  <option value={2}>2nd Floor</option>
+                  <option value={3}>3rd Floor</option>
+                  <option value={4}>4th Floor</option>
+                  <option value={5}>5th Floor</option>
+                </select>
+              </div>
+              <div>
                 <label className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block mb-1">Notes</label>
                 <textarea value={newRoom.notes} onChange={e => setNewRoom(p => ({ ...p, notes: e.target.value }))} rows={2} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none focus:border-charcoal/40 resize-none" />
               </div>
@@ -1385,7 +1777,7 @@ export default function InventoryManagementPage() {
                 </div>
                 <div>
                   <label className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block mb-1">Unit Cost ($)</label>
-                  <input type="number" min={0} step="0.01" value={restockForm.unitCost} onChange={e => setRestockForm(p => ({ ...p, unitCost: Number(e.target.value) }))} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none focus:border-charcoal/40" />
+                  <input type="number" min={0} step="0.01" value={restockForm.unitCost || ""} onChange={e => setRestockForm(p => ({ ...p, unitCost: Number(e.target.value) }))} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none focus:border-charcoal/40" placeholder="0.00" />
                 </div>
               </div>
               <div>

@@ -66,11 +66,19 @@ function todayStr() {
   return new Date().toISOString().split("T")[0];
 }
 
+function scrollToContent(id: string) {
+  // defer so the tab/filter state applies and content renders first
+  setTimeout(() => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "auto", block: "start" });
+  }, 60);
+}
+
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [listings, setListings] = useState<Listing[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [activeTab, setActiveTab] = useState<string>("All");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -111,8 +119,14 @@ export default function TasksPage() {
     (t) => t.dueDate < today && t.status !== "Completed"
   ).length;
 
-  const filtered =
-    activeTab === "All" ? tasks : tasks.filter((t) => t.type === activeTab);
+  const filtered = tasks.filter((t) => {
+    if (activeTab !== "All" && t.type !== activeTab) return false;
+    if (statusFilter === "today") return t.dueDate === today;
+    if (statusFilter === "completed") return t.status === "Completed";
+    if (statusFilter === "in-progress") return t.status === "In Progress";
+    if (statusFilter === "overdue") return t.dueDate < today && t.status !== "Completed";
+    return true;
+  });
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -169,12 +183,16 @@ export default function TasksPage() {
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         {[
-          { label: "Today's Tasks", value: todayCount, icon: Calendar },
-          { label: "Completed", value: completedCount, icon: Check },
-          { label: "In Progress", value: inProgressCount, icon: Clock },
-          { label: "Overdue", value: overdueCount, icon: AlertTriangle },
+          { label: "Today's Tasks", value: todayCount, icon: Calendar, filter: "today" },
+          { label: "Completed", value: completedCount, icon: Check, filter: "completed" },
+          { label: "In Progress", value: inProgressCount, icon: Clock, filter: "in-progress" },
+          { label: "Overdue", value: overdueCount, icon: AlertTriangle, filter: "overdue" },
         ].map((s) => (
-          <div key={s.label} className="bg-white border border-light-gray p-5">
+          <div
+            key={s.label}
+            onClick={() => { setStatusFilter(statusFilter === s.filter ? "all" : s.filter); scrollToContent("admin-tab-content"); }}
+            className={`bg-white border p-5 cursor-pointer transition-colors ${statusFilter === s.filter ? "border-charcoal" : "border-light-gray hover:border-warm-gray"}`}
+          >
             <div className="flex items-center justify-between mb-2">
               <span className={labelCls}>{s.label}</span>
               <s.icon size={14} className="text-warm-gray" />
@@ -316,7 +334,7 @@ export default function TasksPage() {
       )}
 
       {/* Task List */}
-      <div className="space-y-3">
+      <div id="admin-tab-content" className="space-y-3">
         {filtered.length === 0 && (
           <div className="bg-white border border-light-gray p-8 text-center">
             <Sparkles size={20} className="mx-auto text-warm-gray mb-2" />

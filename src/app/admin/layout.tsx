@@ -24,6 +24,7 @@ import {
   ChevronDown,
   ChevronRight,
   DollarSign,
+  Zap,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -64,6 +65,7 @@ const navSections: NavSection[] = [
   {
     label: "System",
     items: [
+      { href: "/admin/automations", label: "Automations", icon: Zap },
       { href: "/admin/integrations", label: "Integrations", icon: Plug },
       { href: "/admin/settings", label: "Settings", icon: Settings },
     ],
@@ -82,6 +84,22 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
       router.push("/login");
     }
   }, [status, router]);
+
+  // Instant scrolling + cream paint background inside the admin area.
+  // The global `html { scroll-behavior: smooth }` animates every scroll, and
+  // the white body background bleeds through as a white block on regions the
+  // compositor hasn't painted yet mid-scroll on long admin pages.
+  useEffect(() => {
+    const html = document.documentElement;
+    html.style.scrollBehavior = "auto";
+    html.style.backgroundColor = "#f5f3ef";
+    document.body.style.backgroundColor = "#f5f3ef";
+    return () => {
+      html.style.scrollBehavior = "";
+      html.style.backgroundColor = "";
+      document.body.style.backgroundColor = "";
+    };
+  }, []);
 
   if (status === "loading") {
     return (

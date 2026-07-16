@@ -44,6 +44,8 @@ export async function POST(req: NextRequest) {
       (item.avgUnitCost * item.quantityOnHand + totalCost) / newQty;
     const remainingValue = newQty * avgUnitCost;
 
+    const inventoryStatus = newQty > item.reorderThreshold ? "ok" : newQty === 0 ? "missing" : "low_stock";
+
     const [purchase] = await prisma.$transaction([
       prisma.inventoryPurchase.create({
         data: { ...body, totalCost },
@@ -54,6 +56,8 @@ export async function POST(req: NextRequest) {
           quantityOnHand: newQty,
           avgUnitCost,
           remainingValue,
+          lastRestockedAt: new Date(),
+          inventoryStatus,
         },
       }),
     ]);

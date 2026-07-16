@@ -12,7 +12,7 @@ export async function PUT(
   const { id } = await params;
 
   try {
-    const { name, trigger, templateId, delay, isActive, conditions } =
+    const { name, trigger, templateId, delay, isActive, conditions, sortOrder } =
       await req.json();
 
     const data: Record<string, unknown> = {};
@@ -22,6 +22,7 @@ export async function PUT(
     if (delay !== undefined) data.delay = delay;
     if (isActive !== undefined) data.isActive = isActive;
     if (conditions !== undefined) data.conditions = conditions;
+    if (sortOrder !== undefined) data.sortOrder = sortOrder;
 
     const automation = await prisma.crmAutomation.update({
       where: { id },

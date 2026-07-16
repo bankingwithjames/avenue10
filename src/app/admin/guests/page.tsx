@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Users,
-  Search,
   Download,
   Upload,
   Mail,
@@ -56,7 +55,41 @@ import {
   Play,
   Pause,
   BarChart3,
+  GripVertical,
+  ArrowUp,
+  ArrowDown,
+  Braces,
+  LayoutGrid,
+  List,
+  AlignJustify,
 } from "lucide-react";
+import { wrapEmailHtml, renderTemplateVars, SAMPLE_PREVIEW_VARS } from "@/lib/emailWrapper";
+import { DataTable, DataTableColumn } from "@/components/admin/DataTable";
+import { MessagingStatusBanner } from "@/components/admin/MessagingStatusBanner";
+import { PersonalizationVariablesPanel } from "@/components/admin/PersonalizationVariables";
+
+// ─── Template preview helpers ───────────────────────────────────────────
+
+// Extend the shared sample vars with the snake_case tokens used by this
+// page's variable chips so previews fill in with realistic guest data.
+const PREVIEW_VARS: Record<string, string> = {
+  ...SAMPLE_PREVIEW_VARS,
+  guest_first_name: SAMPLE_PREVIEW_VARS.firstName,
+  guest_full_name: SAMPLE_PREVIEW_VARS.fullName,
+  guest_name: SAMPLE_PREVIEW_VARS.guestName,
+  property_name: SAMPLE_PREVIEW_VARS.propertyName,
+  listing_name: SAMPLE_PREVIEW_VARS.listingTitle,
+  checkin_date: SAMPLE_PREVIEW_VARS.checkIn,
+  checkout_date: SAMPLE_PREVIEW_VARS.checkOut,
+  portal_link: SAMPLE_PREVIEW_VARS.portalLink,
+  review_link: SAMPLE_PREVIEW_VARS.website,
+  direct_booking_link: SAMPLE_PREVIEW_VARS.website,
+  discount_code: "WELCOME10",
+  access_code: SAMPLE_PREVIEW_VARS.accessCode,
+  confirmation_code: SAMPLE_PREVIEW_VARS.confirmationCode,
+};
+
+const stripHtml = (html: string) => html.replace(/<[^>]+>/g, "");
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -222,6 +255,7 @@ interface AutomationRecord {
   delay: string | null;
   isActive: boolean;
   conditions: string | null;
+  sortOrder: number;
 }
 
 interface TagRecord {
@@ -277,8 +311,10 @@ interface MergedGuest {
 const formatCurrency = (amount: number) =>
   "$" + amount.toLocaleString("en-US", { minimumFractionDigits: 0 });
 
+const toDateStr = (d: string) => new Date(d).toISOString().split("T")[0];
+
 const formatDate = (dateStr: string) =>
-  new Date(dateStr).toLocaleDateString("en-US", {
+  new Date(dateStr + (dateStr.includes("T") ? "" : "T12:00:00")).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -309,9 +345,15 @@ function Badge({ children, className = "" }: { children: React.ReactNode; classN
   );
 }
 
-function StatCard({ label, value, icon: Icon }: { label: string; value: string | number; icon: typeof Users }) {
+function StatCard({ label, value, icon: Icon, onClick }: { label: string; value: string | number; icon: typeof Users; onClick?: () => void }) {
   return (
-    <div className="bg-white border border-light-gray p-4">
+    <div
+      className={`bg-white border border-light-gray p-4${onClick ? " hover:border-warm-gray cursor-pointer transition-colors" : ""}`}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } } : undefined}
+    >
       <div className="flex items-center justify-between mb-2">
         <span className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">{label}</span>
         <Icon size={14} className="text-warm-gray" />
@@ -349,6 +391,13 @@ function DrawerTabButton({ active, onClick, children }: { active: boolean; onCli
 
 // ─── Main Component ─────────────────────────────────────────────────────
 
+function scrollToContent(id: string) {
+  // defer so the tab/filter state applies and content renders first
+  setTimeout(() => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "auto", block: "start" });
+  }, 60);
+}
+
 export default function GuestsCRMPage() {
   // ── State ──
   const [mainTab, setMainTab] = useState<"guests" | "campaigns" | "templates" | "automations">("guests");
@@ -371,8 +420,7 @@ export default function GuestsCRMPage() {
   const [syncing, setSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
 
-  // Search/filter
-  const [search, setSearch] = useState("");
+  // Filter (text search is handled inside DataTable)
   const [statusFilter, setStatusFilter] = useState("all");
   const [showFilters, setShowFilters] = useState(false);
 
@@ -394,6 +442,19 @@ export default function GuestsCRMPage() {
   const [templateForm, setTemplateForm] = useState({ name: "", type: "email", category: "general", subject: "", body: "" });
   const [accommodationForm, setAccommodationForm] = useState<Partial<GuestAccommodation>>({});
   const [saving, setSaving] = useState(false);
+
+  // Campaign builder extras (local to the drawer — not sent to the campaigns API)
+  const [recipientMode, setRecipientMode] = useState<"segment" | "individual">("segment");
+  const [recipientGuestId, setRecipientGuestId] = useState("");
+  const [builderTemplateId, setBuilderTemplateId] = useState("");
+  const [sendingNow, setSendingNow] = useState(false);
+
+  // Templates tab extras
+  const [showVariables, setShowVariables] = useState(false);
+  const [seedingTemplates, setSeedingTemplates] = useState(false);
+  const [templateView, setTemplateView] = useState<"tile" | "list" | "table">("table");
+  const [previewTemplate, setPreviewTemplate] = useState<{ name: string; type: string; subject: string; body: string } | null>(null);
+  const [seedResult, setSeedResult] = useState<string | null>(null);
 
   // ── Data Fetching ──
   const fetchAll = useCallback(async () => {
@@ -429,6 +490,15 @@ export default function GuestsCRMPage() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  // Reset drawer-local campaign state whenever the builder opens
+  useEffect(() => {
+    if (showCampaignBuilder) {
+      setRecipientMode("segment");
+      setRecipientGuestId("");
+      setBuilderTemplateId("");
+    }
+  }, [showCampaignBuilder]);
+
   // ── Sync Guests from Reservations ──
   const syncGuests = async () => {
     setSyncing(true);
@@ -449,12 +519,14 @@ export default function GuestsCRMPage() {
 
     const guestMap = new Map<string, MergedGuest>();
 
+    const todayStr = today.toISOString().split("T")[0];
+
     // Start with CRM guests
     for (const g of guests) {
       const resos = reservations.filter(r => r.guestEmail.toLowerCase() === g.email.toLowerCase());
-      const sorted = [...resos].sort((a, b) => new Date(b.checkOut).getTime() - new Date(a.checkOut).getTime());
-      const upcoming = resos.filter(r => new Date(r.checkIn) > today).sort((a, b) => new Date(a.checkIn).getTime() - new Date(b.checkIn).getTime());
-      const current = resos.some(r => new Date(r.checkIn) <= today && new Date(r.checkOut) >= today);
+      const pastResos = resos.filter(r => toDateStr(r.checkIn) <= todayStr).sort((a, b) => toDateStr(b.checkIn).localeCompare(toDateStr(a.checkIn)));
+      const upcoming = resos.filter(r => toDateStr(r.checkIn) > todayStr && r.status === "confirmed").sort((a, b) => toDateStr(a.checkIn).localeCompare(toDateStr(b.checkIn)));
+      const current = resos.some(r => toDateStr(r.checkIn) <= todayStr && toDateStr(r.checkOut) > todayStr);
       const props = [...new Set(resos.map(r => r.listing.title))];
 
       guestMap.set(g.email.toLowerCase(), {
@@ -477,8 +549,8 @@ export default function GuestsCRMPage() {
         totalBookings: g.totalBookings || resos.length,
         internalNotes: g.internalNotes,
         tags: g.tags?.map(t => t.tag) || [],
-        lastStay: sorted.length > 0 ? sorted[0].checkOut : null,
-        nextStay: upcoming.length > 0 ? upcoming[0].checkIn : null,
+        lastStay: pastResos.length > 0 ? toDateStr(pastResos[0].checkIn) : null,
+        nextStay: upcoming.length > 0 ? toDateStr(upcoming[0].checkIn) : null,
         currentStay: current,
         preferredProperty: props.length > 0 ? props[0] : null,
         portalStatus: resos.some(r => r.agreement) ? "signed" : resos.length > 0 ? "pending" : "none",
@@ -495,9 +567,9 @@ export default function GuestsCRMPage() {
       if (guestMap.has(key)) continue;
 
       const resos = reservations.filter(res => res.guestEmail.toLowerCase() === key);
-      const sorted = [...resos].sort((a, b) => new Date(b.checkOut).getTime() - new Date(a.checkOut).getTime());
-      const upcoming = resos.filter(res => new Date(res.checkIn) > today).sort((a, b) => new Date(a.checkIn).getTime() - new Date(b.checkIn).getTime());
-      const current = resos.some(res => new Date(res.checkIn) <= today && new Date(res.checkOut) >= today);
+      const pastResos = resos.filter(res => toDateStr(res.checkIn) <= todayStr).sort((a, b) => toDateStr(b.checkIn).localeCompare(toDateStr(a.checkIn)));
+      const upcoming = resos.filter(res => toDateStr(res.checkIn) > todayStr && res.status === "confirmed").sort((a, b) => toDateStr(a.checkIn).localeCompare(toDateStr(b.checkIn)));
+      const current = resos.some(res => toDateStr(res.checkIn) <= todayStr && toDateStr(res.checkOut) > todayStr);
       const nameParts = r.guestName.trim().split(/\s+/);
       const props = [...new Set(resos.map(res => res.listing.title))];
 
@@ -521,8 +593,8 @@ export default function GuestsCRMPage() {
         totalBookings: resos.length,
         internalNotes: null,
         tags: [],
-        lastStay: sorted.length > 0 ? sorted[0].checkOut : null,
-        nextStay: upcoming.length > 0 ? upcoming[0].checkIn : null,
+        lastStay: pastResos.length > 0 ? toDateStr(pastResos[0].checkIn) : null,
+        nextStay: upcoming.length > 0 ? toDateStr(upcoming[0].checkIn) : null,
         currentStay: current,
         preferredProperty: props.length > 0 ? props[0] : null,
         portalStatus: resos.some(res => res.agreement) ? "signed" : "pending",
@@ -536,20 +608,9 @@ export default function GuestsCRMPage() {
     return Array.from(guestMap.values()).sort((a, b) => b.totalBookings - a.totalBookings);
   }, [guests, reservations]);
 
-  // ── Filtered Guests ──
+  // ── Filtered Guests (status filter only — text search lives in DataTable) ──
   const filteredGuests = useMemo(() => {
     let list = mergedGuests;
-
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter(g =>
-        `${g.firstName} ${g.lastName}`.toLowerCase().includes(q) ||
-        g.email.toLowerCase().includes(q) ||
-        g.phone?.includes(q) ||
-        g.tags.some(t => t.name.toLowerCase().includes(q)) ||
-        g.preferredProperty?.toLowerCase().includes(q)
-      );
-    }
 
     if (statusFilter !== "all") {
       const today = new Date();
@@ -568,7 +629,7 @@ export default function GuestsCRMPage() {
     }
 
     return list;
-  }, [mergedGuests, search, statusFilter]);
+  }, [mergedGuests, statusFilter]);
 
   // ── KPI Stats ──
   const stats = useMemo(() => {
@@ -651,21 +712,98 @@ export default function GuestsCRMPage() {
     setSaving(false);
   };
 
-  const saveCampaign = async () => {
-    if (!campaignForm.name || !campaignForm.body) return;
+  const deleteGuest = async (guestId: string) => {
+    if (!confirm("Delete this guest? This cannot be undone.")) return;
+    try {
+      const res = await fetch(`/api/admin/guests/${guestId}`, { method: "DELETE" });
+      if (res.ok) {
+        setGuests(prev => prev.filter(g => g.id !== guestId));
+        if (selectedGuest?.id === guestId) setSelectedGuest(null);
+      }
+    } catch { /* ignore */ }
+  };
+
+  const [sendingCampaignId, setSendingCampaignId] = useState<string | null>(null);
+  const sendCampaignNow = async (c: CampaignRecord) => {
+    if (!window.confirm(`Send "${c.name}" to the ${c.segment} segment now? Opted-out and do-not-contact guests are excluded automatically.`)) return;
+    setSendingCampaignId(c.id);
+    try {
+      const res = await fetch(`/api/admin/campaigns/${c.id}/send`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        window.alert(`Campaign sent — ${data.sent} delivered, ${data.failed} failed, ${data.excluded} excluded by consent/segment rules.`);
+      } else {
+        window.alert(data.error || "Send failed.");
+      }
+      await fetchAll();
+    } catch {
+      window.alert("Send failed — network error.");
+    }
+    setSendingCampaignId(null);
+  };
+
+  const saveCampaign = async (): Promise<CampaignRecord | null> => {
+    if (!campaignForm.name || !campaignForm.body) return null;
     setSaving(true);
     try {
       const url = editingCampaign ? `/api/admin/campaigns/${editingCampaign.id}` : "/api/admin/campaigns";
       const method = editingCampaign ? "PUT" : "POST";
       const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(campaignForm) });
       if (res.ok) {
-        setShowCampaignBuilder(false);
-        setEditingCampaign(null);
-        setCampaignForm({ name: "", type: "email", segment: "all", listingFilter: "", subject: "", body: "", ctaText: "", ctaLink: "", scheduledAt: "" });
-        await fetchAll();
+        const data = await res.json();
+        setSaving(false);
+        return data as CampaignRecord;
       }
     } catch { /* ignore */ }
     setSaving(false);
+    return null;
+  };
+
+  const closeCampaignBuilder = () => {
+    setShowCampaignBuilder(false);
+    setEditingCampaign(null);
+    setCampaignForm({ name: "", type: "email", segment: "all", listingFilter: "", subject: "", body: "", ctaText: "", ctaLink: "", scheduledAt: "" });
+  };
+
+  const handleSaveCampaign = async () => {
+    const saved = await saveCampaign();
+    if (saved) {
+      closeCampaignBuilder();
+      await fetchAll();
+    }
+  };
+
+  const sendCampaignFromBuilder = async () => {
+    if (!campaignForm.name || !campaignForm.body) return;
+    if (recipientMode === "individual" && !recipientGuestId) {
+      window.alert("Select a guest to send to.");
+      return;
+    }
+    setSendingNow(true);
+    try {
+      const saved = await saveCampaign();
+      if (!saved || !saved.id) {
+        window.alert("Could not save the campaign — send cancelled.");
+        setSendingNow(false);
+        return;
+      }
+      const res = await fetch(`/api/admin/campaigns/${saved.id}/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(recipientMode === "individual" ? { guestId: recipientGuestId } : {}),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        window.alert(`Sent to ${data.sent} recipient${data.sent === 1 ? "" : "s"}, ${data.failed} failed, ${data.excluded} excluded by consent rules.`);
+      } else {
+        window.alert(data.error || "Send failed.");
+      }
+      closeCampaignBuilder();
+      await fetchAll();
+    } catch {
+      window.alert("Send failed — network error.");
+    }
+    setSendingNow(false);
   };
 
   const saveTemplate = async () => {
@@ -685,12 +823,83 @@ export default function GuestsCRMPage() {
     setSaving(false);
   };
 
+  const loadStarterTemplates = async () => {
+    setSeedingTemplates(true);
+    setSeedResult(null);
+    try {
+      const res = await fetch("/api/admin/seed-templates", { method: "POST" });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data) {
+        setSeedResult(data.created > 0 ? `Added ${data.created} starter template${data.created === 1 ? "" : "s"}` : "All starter templates already present");
+        await fetchAll();
+      } else {
+        setSeedResult(data?.error || "Failed to load starter templates");
+      }
+    } catch {
+      setSeedResult("Failed to load starter templates");
+    }
+    setSeedingTemplates(false);
+  };
+
+  const openTemplateEdit = (t: TemplateRecord) => {
+    setEditingTemplate(t);
+    setTemplateForm({ name: t.name, type: t.type, category: t.category, subject: t.subject || "", body: t.body });
+    setShowTemplateEditor(true);
+  };
+
+  const openTemplatePreview = (t: { name: string; type: string; subject: string | null; body: string }) => {
+    setPreviewTemplate({ name: t.name, type: t.type, subject: t.subject || "", body: t.body });
+  };
+
+  const updateAutomationTemplate = async (auto: AutomationRecord, templateId: string) => {
+    try {
+      await fetch(`/api/admin/automations/${auto.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ templateId: templateId || null }),
+      });
+      await fetchAll();
+    } catch { /* ignore */ }
+  };
+
   const toggleAutomation = async (auto: AutomationRecord) => {
     try {
       await fetch(`/api/admin/automations/${auto.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isActive: !auto.isActive }),
+      });
+      await fetchAll();
+    } catch { /* ignore */ }
+  };
+
+  const updateAutomationDelay = async (auto: AutomationRecord, newDelay: string) => {
+    try {
+      await fetch(`/api/admin/automations/${auto.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ delay: newDelay }),
+      });
+      await fetchAll();
+    } catch { /* ignore */ }
+  };
+
+  const reorderAutomation = async (index: number, direction: "up" | "down") => {
+    const sorted = [...automations].sort((a, b) => a.sortOrder - b.sortOrder);
+    const swapIndex = direction === "up" ? index - 1 : index + 1;
+    if (swapIndex < 0 || swapIndex >= sorted.length) return;
+
+    const order = sorted.map((a, i) => {
+      if (i === index) return { id: a.id, sortOrder: sorted[swapIndex].sortOrder };
+      if (i === swapIndex) return { id: a.id, sortOrder: sorted[index].sortOrder };
+      return { id: a.id, sortOrder: a.sortOrder };
+    });
+
+    try {
+      await fetch("/api/admin/automations/reorder", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order }),
       });
       await fetchAll();
     } catch { /* ignore */ }
@@ -766,6 +975,123 @@ export default function GuestsCRMPage() {
         reservations.some(res => res.guestEmail.toLowerCase() === email.toLowerCase() && res.guestName === r.reservation?.guestName);
     });
 
+  // ── Guest Table Columns ──
+  const guestColumns: DataTableColumn<MergedGuest>[] = [
+    {
+      key: "guest",
+      label: "Guest",
+      accessor: g => `${g.firstName} ${g.lastName}`,
+      render: g => (
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-cream border border-light-gray flex items-center justify-center text-[10px] font-medium text-charcoal shrink-0">
+            {g.firstName[0]}{g.lastName[0] || ""}
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="font-medium text-charcoal truncate">{g.firstName} {g.lastName}</span>
+              {g.isVip && <Crown size={10} className="text-amber-500 shrink-0" />}
+              {g.doNotHost && <Ban size={10} className="text-red-500 shrink-0" />}
+              {g.totalBookings >= 2 && <Badge className="text-emerald-700 bg-emerald-50">Repeat</Badge>}
+            </div>
+            <p className="text-warm-gray truncate text-[11px]">{g.email}</p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "contact",
+      label: "Contact",
+      accessor: g => `${g.email} ${g.phone || ""}`,
+      responsiveClass: "hidden lg:table-cell",
+      render: g => (
+        <div className="text-warm-gray">
+          {g.phone && <div className="flex items-center gap-1"><Phone size={10} />{g.phone}</div>}
+          <div className="flex items-center gap-1"><Mail size={10} />{g.emailOptIn ? "Opted in" : "No"}</div>
+        </div>
+      ),
+    },
+    {
+      key: "status",
+      label: "Status",
+      accessor: g => (g.currentStay ? "Current" : g.nextStay ? "Upcoming" : "Past"),
+      responsiveClass: "hidden md:table-cell",
+      render: g =>
+        g.currentStay ? (
+          <Badge className="text-emerald-700 bg-emerald-50">Current</Badge>
+        ) : g.nextStay ? (
+          <Badge className="text-blue-700 bg-blue-50">Upcoming</Badge>
+        ) : (
+          <Badge className="text-gray-500 bg-gray-100">Past</Badge>
+        ),
+    },
+    {
+      key: "lastStay",
+      label: "Last Stay",
+      accessor: g => (g.lastStay ? new Date(g.lastStay).getTime() : 0),
+      responsiveClass: "hidden lg:table-cell",
+      className: "text-warm-gray",
+      render: g => (g.lastStay ? formatDate(g.lastStay) : "—"),
+    },
+    {
+      key: "nextStay",
+      label: "Next Stay",
+      accessor: g => (g.nextStay ? new Date(g.nextStay).getTime() : 0),
+      responsiveClass: "hidden xl:table-cell",
+      className: "text-warm-gray",
+      render: g => (g.nextStay ? formatDate(g.nextStay) : "—"),
+    },
+    {
+      key: "bookings",
+      label: "Bookings",
+      accessor: g => g.totalBookings,
+      className: "text-right text-charcoal font-medium",
+      headerClassName: "text-right",
+      render: g => g.totalBookings,
+    },
+    {
+      key: "revenue",
+      label: "Revenue",
+      accessor: g => g.lifetimeRevenue,
+      responsiveClass: "hidden md:table-cell",
+      className: "text-right text-charcoal font-medium",
+      headerClassName: "text-right",
+      render: g => formatCurrency(g.lifetimeRevenue),
+    },
+    {
+      key: "tags",
+      label: "Tags",
+      accessor: g => g.tags.map(t => t.name).join(" "),
+      responsiveClass: "hidden xl:table-cell",
+      render: g => (
+        <div className="flex flex-wrap gap-1">
+          {g.tags.slice(0, 3).map(t => (
+            <span key={t.id} className="text-[8px] px-1.5 py-0.5 rounded" style={{ backgroundColor: t.color + "20", color: t.color }}>{t.name}</span>
+          ))}
+          {g.tags.length > 3 && <span className="text-[8px] text-warm-gray">+{g.tags.length - 3}</span>}
+        </div>
+      ),
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      sortable: false,
+      className: "text-right",
+      headerClassName: "text-right",
+      render: g => (
+        <div className="flex items-center justify-end gap-1">
+          <button onClick={e => { e.stopPropagation(); openGuest(g); }} className="text-charcoal hover:bg-cream p-1.5 transition" title="View Profile">
+            <Eye size={14} />
+          </button>
+          {g.id && (
+            <button onClick={e => { e.stopPropagation(); deleteGuest(g.id!); }} className="text-warm-gray hover:text-red-600 hover:bg-red-50 p-1.5 transition" title="Delete Guest">
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
+      ),
+    },
+  ];
+
   // ── Loading ──
   if (loading) {
     return (
@@ -831,16 +1157,16 @@ export default function GuestsCRMPage() {
 
       {/* ─── KPI Dashboard Cards ─────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-6">
-        <StatCard label="Total Guests" value={stats.total} icon={Users} />
-        <StatCard label="Upcoming" value={stats.upcoming} icon={Calendar} />
-        <StatCard label="Current" value={stats.current} icon={Home} />
-        <StatCard label="Repeat Guests" value={stats.repeat} icon={Star} />
-        <StatCard label="VIP Guests" value={stats.vip} icon={Crown} />
-        <StatCard label="Open Requests" value={stats.openRequests} icon={MessageSquare} />
-        <StatCard label="Subscribers" value={stats.subscribers} icon={Mail} />
-        <StatCard label="Reviews Pending" value={stats.pendingReviews} icon={ClipboardList} />
-        <StatCard label="Past Guests" value={stats.past} icon={Clock} />
-        <StatCard label="Do Not Host" value={stats.doNotHost} icon={Ban} />
+        <StatCard label="Total Guests" value={stats.total} icon={Users} onClick={() => { setMainTab("guests"); setStatusFilter("all"); scrollToContent("admin-tab-content"); }} />
+        <StatCard label="Upcoming" value={stats.upcoming} icon={Calendar} onClick={() => { setMainTab("guests"); setStatusFilter("upcoming"); scrollToContent("admin-tab-content"); }} />
+        <StatCard label="Current" value={stats.current} icon={Home} onClick={() => { setMainTab("guests"); setStatusFilter("current"); scrollToContent("admin-tab-content"); }} />
+        <StatCard label="Repeat Guests" value={stats.repeat} icon={Star} onClick={() => { setMainTab("guests"); setStatusFilter("repeat"); scrollToContent("admin-tab-content"); }} />
+        <StatCard label="VIP Guests" value={stats.vip} icon={Crown} onClick={() => { setMainTab("guests"); setStatusFilter("vip"); scrollToContent("admin-tab-content"); }} />
+        <StatCard label="Open Requests" value={stats.openRequests} icon={MessageSquare} onClick={() => { setMainTab("guests"); scrollToContent("admin-tab-content"); }} />
+        <StatCard label="Subscribers" value={stats.subscribers} icon={Mail} onClick={() => { setMainTab("guests"); setStatusFilter("email-optin"); scrollToContent("admin-tab-content"); }} />
+        <StatCard label="Reviews Pending" value={stats.pendingReviews} icon={ClipboardList} onClick={() => { setMainTab("guests"); scrollToContent("admin-tab-content"); }} />
+        <StatCard label="Past Guests" value={stats.past} icon={Clock} onClick={() => { setMainTab("guests"); setStatusFilter("past"); scrollToContent("admin-tab-content"); }} />
+        <StatCard label="Do Not Host" value={stats.doNotHost} icon={Ban} onClick={() => { setMainTab("guests"); setStatusFilter("donothost"); scrollToContent("admin-tab-content"); }} />
       </div>
 
       {/* ─── Sync Button ─────────────────────────────────────────────── */}
@@ -857,7 +1183,7 @@ export default function GuestsCRMPage() {
       </div>
 
       {/* ─── Main Tabs ───────────────────────────────────────────────── */}
-      <div className="flex items-center border border-light-gray bg-white mb-6 overflow-x-auto">
+      <div id="admin-tab-content" className="flex items-center border border-light-gray bg-white mb-6 overflow-x-auto">
         <TabButton active={mainTab === "guests"} onClick={() => setMainTab("guests")}>
           <span className="flex items-center gap-1.5"><Users size={12} /> Guests</span>
         </TabButton>
@@ -877,18 +1203,8 @@ export default function GuestsCRMPage() {
       {/* ═══════════════════════════════════════════════════════════════ */}
       {mainTab === "guests" && (
         <>
-          {/* Search & Filters */}
-          <div className="flex flex-col sm:flex-row gap-3 mb-4">
-            <div className="relative flex-1">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-gray" />
-              <input
-                type="text"
-                placeholder="Search by name, email, phone, tag, or property..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="w-full bg-transparent border border-light-gray text-charcoal text-xs px-3 py-2.5 pl-9 outline-none focus:border-charcoal/40 transition-colors"
-              />
-            </div>
+          {/* Status Filter (kept external so stat tiles can drive it) */}
+          <div className="flex flex-col sm:flex-row gap-3 mb-4 sm:justify-end">
             <select
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value)}
@@ -908,94 +1224,20 @@ export default function GuestsCRMPage() {
           </div>
 
           {/* Guest Table */}
-          <div className="bg-white border border-light-gray overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-light-gray">
-                  <th className="text-left px-4 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Guest</th>
-                  <th className="text-left px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium hidden lg:table-cell">Contact</th>
-                  <th className="text-left px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium hidden md:table-cell">Status</th>
-                  <th className="text-left px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium hidden lg:table-cell">Last Stay</th>
-                  <th className="text-left px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium hidden xl:table-cell">Next Stay</th>
-                  <th className="text-right px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Bookings</th>
-                  <th className="text-right px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium hidden md:table-cell">Revenue</th>
-                  <th className="text-left px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium hidden xl:table-cell">Tags</th>
-                  <th className="text-right px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredGuests.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="text-center py-12 text-warm-gray">
-                      {mergedGuests.length === 0 ? (
-                        <div>
-                          <Users size={24} className="mx-auto mb-2 text-warm-gray/50" />
-                          <p className="mb-1">No guests yet</p>
-                          <p className="text-[10px]">Add guests manually, import from CSV, or sync from reservations.</p>
-                        </div>
-                      ) : "No guests match your filters."}
-                    </td>
-                  </tr>
-                ) : filteredGuests.map(guest => (
-                  <tr key={guest.email} className="border-b border-light-gray/50 hover:bg-cream/50 transition cursor-pointer" onClick={() => openGuest(guest)}>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-cream border border-light-gray flex items-center justify-center text-[10px] font-medium text-charcoal shrink-0">
-                          {guest.firstName[0]}{guest.lastName[0] || ""}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-medium text-charcoal truncate">{guest.firstName} {guest.lastName}</span>
-                            {guest.isVip && <Crown size={10} className="text-amber-500 shrink-0" />}
-                            {guest.doNotHost && <Ban size={10} className="text-red-500 shrink-0" />}
-                            {guest.totalBookings >= 2 && <Badge className="text-emerald-700 bg-emerald-50">Repeat</Badge>}
-                          </div>
-                          <p className="text-warm-gray truncate text-[11px]">{guest.email}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 hidden lg:table-cell">
-                      <div className="text-warm-gray">
-                        {guest.phone && <div className="flex items-center gap-1"><Phone size={10} />{guest.phone}</div>}
-                        <div className="flex items-center gap-1"><Mail size={10} />{guest.emailOptIn ? "Opted in" : "No"}</div>
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 hidden md:table-cell">
-                      {guest.currentStay ? (
-                        <Badge className="text-emerald-700 bg-emerald-50">Current</Badge>
-                      ) : guest.nextStay ? (
-                        <Badge className="text-blue-700 bg-blue-50">Upcoming</Badge>
-                      ) : (
-                        <Badge className="text-gray-500 bg-gray-100">Past</Badge>
-                      )}
-                    </td>
-                    <td className="px-3 py-3 text-warm-gray hidden lg:table-cell">
-                      {guest.lastStay ? formatDate(guest.lastStay) : "—"}
-                    </td>
-                    <td className="px-3 py-3 text-warm-gray hidden xl:table-cell">
-                      {guest.nextStay ? formatDate(guest.nextStay) : "—"}
-                    </td>
-                    <td className="px-3 py-3 text-right text-charcoal font-medium">{guest.totalBookings}</td>
-                    <td className="px-3 py-3 text-right text-charcoal font-medium hidden md:table-cell">{formatCurrency(guest.lifetimeRevenue)}</td>
-                    <td className="px-3 py-3 hidden xl:table-cell">
-                      <div className="flex flex-wrap gap-1">
-                        {guest.tags.slice(0, 3).map(t => (
-                          <span key={t.id} className="text-[8px] px-1.5 py-0.5 rounded" style={{ backgroundColor: t.color + "20", color: t.color }}>{t.name}</span>
-                        ))}
-                        {guest.tags.length > 3 && <span className="text-[8px] text-warm-gray">+{guest.tags.length - 3}</span>}
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 text-right">
-                      <button onClick={e => { e.stopPropagation(); openGuest(guest); }} className="text-charcoal hover:bg-cream p-1.5 transition" title="View Profile">
-                        <Eye size={14} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="text-[10px] text-warm-gray mt-2">{filteredGuests.length} of {mergedGuests.length} guests</p>
+          <DataTable
+            columns={guestColumns}
+            rows={filteredGuests}
+            rowKey={g => g.email}
+            searchPlaceholder="Search by name, email, phone, or tag..."
+            onRowClick={g => openGuest(g)}
+            defaultPageSize={25}
+            defaultSort={{ key: "bookings", dir: "desc" }}
+            emptyMessage={
+              mergedGuests.length === 0
+                ? "No guests yet. Add guests manually, import from CSV, or sync from reservations."
+                : "No guests match your filters."
+            }
+          />
         </>
       )}
 
@@ -1039,6 +1281,15 @@ export default function GuestsCRMPage() {
                       <div className="text-center"><p className="text-[9px] uppercase tracking-wider font-medium mb-0.5">Clicked</p><p className="text-sm text-charcoal font-medium">{c.totalClicked}</p></div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      {c.status !== "sent" && (
+                        <button
+                          onClick={() => sendCampaignNow(c)}
+                          disabled={sendingCampaignId === c.id}
+                          className="bg-charcoal text-white text-[9px] tracking-[0.1em] uppercase font-medium hover:bg-stone transition px-2.5 py-1.5 flex items-center gap-1 disabled:opacity-50"
+                        >
+                          <Send size={10} /> {sendingCampaignId === c.id ? "Sending..." : "Send"}
+                        </button>
+                      )}
                       <button onClick={() => { setEditingCampaign(c); setCampaignForm({ name: c.name, type: c.type, segment: c.segment, listingFilter: c.listingFilter || "", subject: c.subject || "", body: c.body, ctaText: c.ctaText || "", ctaLink: c.ctaLink || "", scheduledAt: c.scheduledAt || "" }); setShowCampaignBuilder(true); }} className="text-charcoal hover:bg-cream p-1.5 transition"><Edit3 size={14} /></button>
                       <button onClick={() => { setCampaignForm({ name: c.name + " (copy)", type: c.type, segment: c.segment, listingFilter: c.listingFilter || "", subject: c.subject || "", body: c.body, ctaText: c.ctaText || "", ctaLink: c.ctaLink || "", scheduledAt: "" }); setEditingCampaign(null); setShowCampaignBuilder(true); }} className="text-charcoal hover:bg-cream p-1.5 transition"><Copy size={14} /></button>
                     </div>
@@ -1057,11 +1308,47 @@ export default function GuestsCRMPage() {
       {mainTab === "templates" && (
         <>
           <div className="flex items-center justify-between mb-4">
-            <p className="text-xs text-warm-gray">{templates.length} templates</p>
-            <button onClick={() => { setEditingTemplate(null); setTemplateForm({ name: "", type: "email", category: "general", subject: "", body: "" }); setShowTemplateEditor(true); }} className="bg-charcoal text-white text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-stone transition px-4 py-2.5 flex items-center gap-1.5">
-              <Plus size={12} /> New Template
-            </button>
+            <div className="flex items-center gap-3">
+              <p className="text-xs text-warm-gray">{templates.length} templates</p>
+              {seedResult && <p className="text-[10px] text-warm-gray bg-cream border border-light-gray px-2 py-1">{seedResult}</p>}
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center border border-light-gray bg-white">
+                {([
+                  { mode: "tile" as const, icon: <LayoutGrid size={13} />, title: "Detailed table" },
+                  { mode: "list" as const, icon: <List size={13} />, title: "Standard table" },
+                  { mode: "table" as const, icon: <AlignJustify size={13} />, title: "Compact table" },
+                ]).map(v => (
+                  <button
+                    key={v.mode}
+                    onClick={() => setTemplateView(v.mode)}
+                    title={v.title}
+                    className={`p-2.5 transition ${templateView === v.mode ? "bg-charcoal text-white" : "text-warm-gray hover:text-charcoal hover:bg-cream"}`}
+                  >
+                    {v.icon}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setShowVariables(v => !v)}
+                className={`text-[10px] tracking-[0.15em] uppercase font-medium transition px-4 py-2.5 flex items-center gap-1.5 border ${showVariables ? "bg-charcoal text-white border-charcoal" : "bg-white text-charcoal border-light-gray hover:bg-cream"}`}
+              >
+                <Braces size={12} /> Variables
+              </button>
+              <button
+                onClick={loadStarterTemplates}
+                disabled={seedingTemplates}
+                className="bg-white text-charcoal border border-light-gray text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-cream transition px-4 py-2.5 flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <Download size={12} /> {seedingTemplates ? "Loading..." : "Load Starter Templates"}
+              </button>
+              <button onClick={() => { setEditingTemplate(null); setTemplateForm({ name: "", type: "email", category: "general", subject: "", body: "" }); setShowTemplateEditor(true); }} className="bg-charcoal text-white text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-stone transition px-4 py-2.5 flex items-center gap-1.5">
+                <Plus size={12} /> New Template
+              </button>
+            </div>
           </div>
+
+          {showVariables && <PersonalizationVariablesPanel />}
 
           {templates.length === 0 ? (
             <div className="bg-white border border-light-gray p-12 text-center">
@@ -1070,36 +1357,151 @@ export default function GuestsCRMPage() {
               <p className="text-xs text-warm-gray mb-4">Create reusable templates for booking confirmations, check-in instructions, review requests, and more.</p>
               <button onClick={() => setShowTemplateEditor(true)} className="bg-charcoal text-white text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-stone transition px-4 py-2.5">Create Template</button>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {templates.map(t => (
-                <div key={t.id} className="bg-white border border-light-gray p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-sm font-medium text-charcoal truncate">{t.name}</h3>
-                    <div className="flex items-center gap-1">
-                      <Badge className="text-warm-gray bg-cream">{t.type}</Badge>
-                      <Badge className="text-warm-gray bg-cream">{t.category}</Badge>
-                    </div>
-                  </div>
-                  {t.subject && <p className="text-xs text-warm-gray mb-2 truncate">Subject: {t.subject}</p>}
-                  <p className="text-xs text-warm-gray line-clamp-2 mb-3">{t.body}</p>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => { setEditingTemplate(t); setTemplateForm({ name: t.name, type: t.type, category: t.category, subject: t.subject || "", body: t.body }); setShowTemplateEditor(true); }} className="text-charcoal hover:bg-cream p-1.5 transition"><Edit3 size={13} /></button>
-                  </div>
+          ) : (() => {
+            const actionsCol: DataTableColumn<TemplateRecord> = {
+              key: "actions",
+              label: "Actions",
+              sortable: false,
+              className: "text-right",
+              headerClassName: "text-right",
+              render: (t) => (
+                <div className="flex items-center justify-end gap-1">
+                  <button onClick={(e) => { e.stopPropagation(); openTemplatePreview(t); }} title="Preview" className="text-charcoal hover:bg-cream p-1.5 transition"><Eye size={13} /></button>
+                  <button onClick={(e) => { e.stopPropagation(); openTemplateEdit(t); }} title="Edit" className="text-charcoal hover:bg-cream p-1.5 transition"><Edit3 size={13} /></button>
                 </div>
-              ))}
-            </div>
-          )}
+              ),
+            };
 
-          {/* Personalization Variables Reference */}
-          <div className="bg-white border border-light-gray p-4 mt-6">
-            <h3 className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium mb-3">Personalization Variables</h3>
-            <div className="flex flex-wrap gap-2">
-              {["{{guest_first_name}}", "{{guest_full_name}}", "{{property_name}}", "{{listing_name}}", "{{checkin_date}}", "{{checkout_date}}", "{{portal_link}}", "{{review_link}}", "{{direct_booking_link}}", "{{discount_code}}"].map(v => (
-                <code key={v} className="text-[10px] bg-cream px-2 py-1 text-charcoal border border-light-gray cursor-pointer hover:bg-light-gray transition" onClick={() => navigator.clipboard.writeText(v)}>{v}</code>
-              ))}
-            </div>
-          </div>
+            const columns: DataTableColumn<TemplateRecord>[] =
+              templateView === "tile"
+                ? [
+                    // Detailed: rich rows with badges under the name and a two-line body preview
+                    {
+                      key: "name",
+                      label: "Template",
+                      accessor: (t) => t.name,
+                      render: (t) => (
+                        <div className="min-w-[180px]">
+                          <p className="text-sm font-medium text-charcoal mb-1">{t.name}</p>
+                          <div className="flex items-center gap-1">
+                            <Badge className="text-warm-gray bg-cream">{t.type}</Badge>
+                            <Badge className="text-warm-gray bg-cream">{t.category}</Badge>
+                          </div>
+                        </div>
+                      ),
+                    },
+                    {
+                      key: "subject",
+                      label: "Subject / Content",
+                      accessor: (t) => `${t.subject || ""} ${stripHtml(t.body)}`,
+                      render: (t) => (
+                        <div className="min-w-0 max-w-2xl py-1">
+                          {t.subject && <p className="text-xs text-charcoal mb-1">{t.subject}</p>}
+                          <p className="text-xs text-warm-gray line-clamp-2">{stripHtml(t.body)}</p>
+                        </div>
+                      ),
+                    },
+                    actionsCol,
+                  ]
+                : templateView === "list"
+                  ? [
+                      // Standard: one row per template, separate badge columns
+                      {
+                        key: "name",
+                        label: "Template",
+                        accessor: (t) => t.name,
+                        render: (t) => <span className="text-sm font-medium text-charcoal">{t.name}</span>,
+                      },
+                      {
+                        key: "type",
+                        label: "Type",
+                        accessor: (t) => t.type,
+                        render: (t) => <Badge className="text-warm-gray bg-cream">{t.type}</Badge>,
+                      },
+                      {
+                        key: "category",
+                        label: "Event",
+                        accessor: (t) => t.category,
+                        render: (t) => <Badge className="text-warm-gray bg-cream">{t.category}</Badge>,
+                        responsiveClass: "hidden md:table-cell",
+                      },
+                      {
+                        key: "subject",
+                        label: "Subject / Content",
+                        accessor: (t) => `${t.subject || ""} ${stripHtml(t.body)}`,
+                        render: (t) => (
+                          <div className="min-w-0 max-w-md">
+                            {t.subject && <p className="text-xs text-charcoal truncate">{t.subject}</p>}
+                            <p className="text-xs text-warm-gray truncate">{stripHtml(t.body).slice(0, 110)}</p>
+                          </div>
+                        ),
+                      },
+                      actionsCol,
+                    ]
+                  : [
+                      // Compact: dense single-line rows
+                      {
+                        key: "name",
+                        label: "Template",
+                        accessor: (t) => t.name,
+                        render: (t) => <span className="text-xs font-medium text-charcoal whitespace-nowrap">{t.name}</span>,
+                      },
+                      {
+                        key: "type",
+                        label: "Type",
+                        accessor: (t) => t.type,
+                        render: (t) => <span className="text-[10px] uppercase tracking-wider text-warm-gray">{t.type}</span>,
+                      },
+                      {
+                        key: "category",
+                        label: "Event",
+                        accessor: (t) => t.category,
+                        render: (t) => <span className="text-[10px] uppercase tracking-wider text-warm-gray whitespace-nowrap">{t.category}</span>,
+                        responsiveClass: "hidden md:table-cell",
+                      },
+                      {
+                        key: "subject",
+                        label: "Subject / Content",
+                        accessor: (t) => `${t.subject || ""} ${stripHtml(t.body)}`,
+                        render: (t) => <span className="text-xs text-warm-gray truncate block max-w-md">{t.subject || stripHtml(t.body).slice(0, 90)}</span>,
+                      },
+                      actionsCol,
+                    ];
+
+            return (
+              <DataTable
+                rows={templates}
+                rowKey={(t) => t.id}
+                searchPlaceholder="Search templates by name, subject, or content..."
+                defaultPageSize={templateView === "tile" ? 10 : 25}
+                defaultSort={{ key: "name", dir: "asc" }}
+                emptyMessage="No templates match your filters."
+                onRowClick={(t) => openTemplatePreview(t)}
+                filters={[
+                  {
+                    key: "type",
+                    label: "Type",
+                    options: [
+                      { value: "email", label: "Email" },
+                      { value: "sms", label: "SMS" },
+                    ],
+                    match: (t, v) => t.type === v,
+                  },
+                  {
+                    key: "category",
+                    label: "Event",
+                    options: [...new Set(templates.map((t) => t.category))].sort().map((c) => ({
+                      value: c,
+                      label: c.replace(/-/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase()),
+                    })),
+                    match: (t, v) => t.category === v,
+                  },
+                ]}
+                columns={columns}
+              />
+            );
+          })()}
+
         </>
       )}
 
@@ -1108,11 +1510,12 @@ export default function GuestsCRMPage() {
       {/* ═══════════════════════════════════════════════════════════════ */}
       {mainTab === "automations" && (
         <>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
             <p className="text-xs text-warm-gray">{automations.length} automation rules</p>
+            <p className="text-[10px] text-warm-gray">Use arrows to reorder execution sequence</p>
           </div>
 
-          {/* Default Automations */}
+          {/* Automation Rules */}
           {(() => {
             const defaultAutomations = [
               { trigger: "booking-confirmed", name: "Send booking confirmation", delay: "0h", description: "Immediately after booking is confirmed" },
@@ -1127,64 +1530,193 @@ export default function GuestsCRMPage() {
               { trigger: "win-back", name: "Win-back campaign", delay: "6m", description: "6 months after last stay" },
             ];
 
-            const existingTriggers = new Set(automations.map(a => `${a.trigger}-${a.name}`));
+            const sorted = [...automations].sort((a, b) => a.sortOrder - b.sortOrder);
+
+            const delayOptions: { value: string; label: string }[] = [
+              { value: "0h", label: "Immediately" },
+              { value: "15m", label: "15 minutes" },
+              { value: "30m", label: "30 minutes" },
+              { value: "1h", label: "1 hour" },
+              { value: "2h", label: "2 hours" },
+              { value: "4h", label: "4 hours" },
+              { value: "6h", label: "6 hours" },
+              { value: "12h", label: "12 hours" },
+              { value: "24h", label: "24 hours" },
+              { value: "48h", label: "48 hours" },
+              { value: "72h", label: "3 days" },
+              { value: "7d", label: "7 days" },
+              { value: "14d", label: "14 days" },
+              { value: "30d", label: "30 days" },
+              { value: "3m", label: "3 months" },
+              { value: "6m", label: "6 months" },
+            ];
+
+            const getDelayLabel = (delay: string | null) => {
+              const opt = delayOptions.find(d => d.value === delay);
+              return opt ? opt.label : delay || "—";
+            };
+
+            const uninitialized = defaultAutomations.filter(
+              da => !automations.some(a => a.trigger === da.trigger && a.name === da.name)
+            );
 
             return (
               <div className="space-y-2">
-                {defaultAutomations.map((da, i) => {
-                  const existing = automations.find(a => a.trigger === da.trigger && a.name === da.name);
+                {/* Active / initialized automations — ordered by sortOrder */}
+                {sorted.map((auto, idx) => {
+                  const da = defaultAutomations.find(d => d.trigger === auto.trigger && d.name === auto.name);
+                  const description = da?.description || auto.trigger;
+
                   return (
-                    <div key={i} className="bg-white border border-light-gray p-4 flex items-center justify-between">
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div className={`w-8 h-8 flex items-center justify-center shrink-0 ${existing?.isActive ? "bg-emerald-50 text-emerald-600" : "bg-gray-100 text-warm-gray"}`}>
-                          <Zap size={14} />
-                        </div>
-                        <div className="min-w-0">
-                          <h3 className="text-sm font-medium text-charcoal">{da.name}</h3>
-                          <p className="text-xs text-warm-gray">{da.description}</p>
-                        </div>
+                    <div key={auto.id} className="bg-white border border-light-gray p-4 flex flex-wrap items-center gap-3">
+                      {/* Reorder controls */}
+                      <div className="flex flex-col gap-0.5 shrink-0">
+                        <button
+                          onClick={() => reorderAutomation(idx, "up")}
+                          disabled={idx === 0}
+                          className="text-warm-gray hover:text-charcoal disabled:opacity-20 disabled:cursor-not-allowed p-0.5 transition"
+                          title="Move up"
+                        >
+                          <ArrowUp size={12} />
+                        </button>
+                        <button
+                          onClick={() => reorderAutomation(idx, "down")}
+                          disabled={idx === sorted.length - 1}
+                          className="text-warm-gray hover:text-charcoal disabled:opacity-20 disabled:cursor-not-allowed p-0.5 transition"
+                          title="Move down"
+                        >
+                          <ArrowDown size={12} />
+                        </button>
                       </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        <Badge className="text-warm-gray bg-cream">{da.delay}</Badge>
-                        {existing ? (
-                          <button
-                            onClick={() => toggleAutomation(existing)}
-                            className={`w-10 h-5 rounded-full transition relative ${existing.isActive ? "bg-emerald-500" : "bg-gray-300"}`}
+
+                      {/* Order number */}
+                      <div className="w-6 h-6 bg-cream border border-light-gray flex items-center justify-center text-[10px] font-medium text-warm-gray shrink-0">
+                        {idx + 1}
+                      </div>
+
+                      {/* Icon */}
+                      <div className={`w-8 h-8 flex items-center justify-center shrink-0 ${auto.isActive ? "bg-emerald-50 text-emerald-600" : "bg-gray-100 text-warm-gray"}`}>
+                        <Zap size={14} />
+                      </div>
+
+                      {/* Name & description */}
+                      <div className="flex-1 min-w-[150px]">
+                        <h3 className="text-sm font-medium text-charcoal">{auto.name}</h3>
+                        <p className="text-xs text-warm-gray">{description}</p>
+                      </div>
+
+                      {/* Controls — wrap to their own line on mobile */}
+                      <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                      {/* Template selector */}
+                      {(() => {
+                        const activeTemplates = templates.filter(t => t.isActive);
+                        const matching = activeTemplates.filter(t => t.category === auto.trigger);
+                        const others = activeTemplates.filter(t => t.category !== auto.trigger);
+                        return (
+                          <select
+                            value={auto.templateId || ""}
+                            onChange={(e) => updateAutomationTemplate(auto, e.target.value)}
+                            className="text-[10px] border border-light-gray bg-cream text-charcoal px-2 py-1.5 outline-none focus:border-charcoal/40 shrink-0 cursor-pointer max-w-[220px] truncate"
+                            title="Message template"
                           >
-                            <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 transition-all ${existing.isActive ? "left-5" : "left-0.5"}`} />
-                          </button>
-                        ) : (
-                          <button
-                            onClick={async () => {
-                              await fetch("/api/admin/automations", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ name: da.name, trigger: da.trigger, delay: da.delay, isActive: false }),
-                              });
-                              await fetchAll();
-                            }}
-                            className="text-[10px] text-charcoal border border-light-gray px-2 py-1 hover:bg-cream transition"
-                          >
-                            Enable
-                          </button>
-                        )}
+                            <option value="">Default message</option>
+                            {matching.map(t => (
+                              <option key={t.id} value={t.id}>{t.name}</option>
+                            ))}
+                            {others.length > 0 && (
+                              <optgroup label="— Other templates —">
+                                {others.map(t => (
+                                  <option key={t.id} value={t.id}>{t.name}</option>
+                                ))}
+                              </optgroup>
+                            )}
+                          </select>
+                        );
+                      })()}
+
+                      {/* Delay selector */}
+                      <select
+                        value={auto.delay || "0h"}
+                        onChange={(e) => updateAutomationDelay(auto, e.target.value)}
+                        className="text-[10px] border border-light-gray bg-cream text-charcoal px-2 py-1.5 outline-none focus:border-charcoal/40 shrink-0 cursor-pointer max-w-full"
+                      >
+                        {delayOptions.map(opt => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+
+                      {/* Toggle */}
+                      <button
+                        onClick={() => toggleAutomation(auto)}
+                        className={`w-10 h-5 rounded-full transition relative shrink-0 ${auto.isActive ? "bg-emerald-500" : "bg-gray-300"}`}
+                      >
+                        <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 transition-all ${auto.isActive ? "left-5" : "left-0.5"}`} />
+                      </button>
                       </div>
                     </div>
                   );
                 })}
+
+                {/* Uninitialized default automations */}
+                {uninitialized.length > 0 && sorted.length > 0 && (
+                  <div className="border-t border-light-gray mt-4 pt-4">
+                    <p className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium mb-2">Available Automations</p>
+                  </div>
+                )}
+                {uninitialized.map((da, i) => (
+                  <div key={`unset-${i}`} className="bg-white border border-light-gray border-dashed p-4 flex flex-wrap items-center justify-between gap-2 opacity-60">
+                    <div className="flex items-center gap-3 flex-1 min-w-[150px]">
+                      <div className="w-8 h-8 flex items-center justify-center shrink-0 bg-gray-100 text-warm-gray">
+                        <Zap size={14} />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="text-sm font-medium text-charcoal">{da.name}</h3>
+                        <p className="text-xs text-warm-gray">{da.description}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <Badge className="text-warm-gray bg-cream">{da.delay}</Badge>
+                      <button
+                        onClick={async () => {
+                          await fetch("/api/admin/automations", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ name: da.name, trigger: da.trigger, delay: da.delay, isActive: false }),
+                          });
+                          await fetchAll();
+                        }}
+                        className="text-[10px] text-charcoal border border-light-gray px-2 py-1 hover:bg-cream transition"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Initialize all button when none exist */}
+                {automations.length === 0 && (
+                  <button
+                    onClick={async () => {
+                      for (let i = 0; i < defaultAutomations.length; i++) {
+                        const da = defaultAutomations[i];
+                        await fetch("/api/admin/automations", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ name: da.name, trigger: da.trigger, delay: da.delay, isActive: false, sortOrder: i }),
+                        });
+                      }
+                      await fetchAll();
+                    }}
+                    className="w-full bg-charcoal text-white text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-stone transition px-4 py-3 mt-2"
+                  >
+                    Initialize All Automations
+                  </button>
+                )}
               </div>
             );
           })()}
 
-          <div className="bg-amber-50 border border-amber-200 p-4 mt-4">
-            <div className="flex items-start gap-2">
-              <AlertTriangle size={14} className="text-amber-600 mt-0.5 shrink-0" />
-              <div>
-                <p className="text-xs text-amber-800 font-medium">Email/SMS sending requires integration</p>
-                <p className="text-xs text-amber-700 mt-1">Connect SendGrid, Mailgun, or Twilio in Settings &gt; Integrations to enable automated message delivery. Until then, automations will log actions but not send messages.</p>
-              </div>
-            </div>
-          </div>
+          <MessagingStatusBanner />
         </>
       )}
 
@@ -1769,6 +2301,36 @@ export default function GuestsCRMPage() {
             </div>
             <div className="p-4 space-y-4">
               <div>
+                <label className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block mb-1">Start from Template</label>
+                <select
+                  value={builderTemplateId}
+                  onChange={e => {
+                    const id = e.target.value;
+                    setBuilderTemplateId(id);
+                    const t = templates.find(tpl => tpl.id === id);
+                    if (t) setCampaignForm(p => ({ ...p, type: t.type, subject: t.subject || "", body: t.body }));
+                  }}
+                  className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none bg-white"
+                >
+                  <option value="">— blank —</option>
+                  {templates.some(t => t.isActive && t.type === "email") && (
+                    <optgroup label="Email Templates">
+                      {templates.filter(t => t.isActive && t.type === "email").map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {templates.some(t => t.isActive && t.type === "sms") && (
+                    <optgroup label="SMS Templates">
+                      {templates.filter(t => t.isActive && t.type === "sms").map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+                <p className="text-[10px] text-warm-gray mt-1">You can edit the message after applying.</p>
+              </div>
+              <div>
                 <label className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block mb-1">Campaign Name *</label>
                 <input value={campaignForm.name} onChange={e => setCampaignForm(p => ({ ...p, name: e.target.value }))} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none focus:border-charcoal/40" placeholder="e.g., Summer Return Offer" />
               </div>
@@ -1782,21 +2344,49 @@ export default function GuestsCRMPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block mb-1">Audience Segment</label>
-                  <select value={campaignForm.segment} onChange={e => setCampaignForm(p => ({ ...p, segment: e.target.value }))} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none bg-white">
-                    <option value="all">All Guests</option>
-                    <option value="past">Past Guests</option>
-                    <option value="upcoming">Upcoming Guests</option>
-                    <option value="current">Current Guests</option>
-                    <option value="repeat">Repeat Guests</option>
-                    <option value="vip">VIP Guests</option>
-                    <option value="with-kids">Guests with Kids</option>
-                    <option value="pet-guests">Pet Guests</option>
-                    <option value="reviewed">Left a Review</option>
-                    <option value="no-review">No Review Yet</option>
-                    <option value="direct-booking">Direct Booking Leads</option>
-                    <option value="holiday">Holiday Guests</option>
-                  </select>
+                  <label className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block mb-1">{recipientMode === "individual" ? "Individual Guest" : "Audience Segment"}</label>
+                  {recipientMode === "individual" ? (
+                    <select value={recipientGuestId} onChange={e => setRecipientGuestId(e.target.value)} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none bg-white">
+                      <option value="">Select a guest...</option>
+                      {mergedGuests.filter(g => g.id).map(g => (
+                        <option key={g.id as string} value={g.id as string}>{g.firstName} {g.lastName} — {g.email}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <select value={campaignForm.segment} onChange={e => setCampaignForm(p => ({ ...p, segment: e.target.value }))} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none bg-white">
+                      <option value="all">All Guests</option>
+                      <option value="past">Past Guests</option>
+                      <option value="upcoming">Upcoming Guests</option>
+                      <option value="current">Current Guests</option>
+                      <option value="repeat">Repeat Guests</option>
+                      <option value="vip">VIP Guests</option>
+                      <option value="with-kids">Guests with Kids</option>
+                      <option value="pet-guests">Pet Guests</option>
+                      <option value="reviewed">Left a Review</option>
+                      <option value="no-review">No Review Yet</option>
+                      <option value="direct-booking">Direct Booking Leads</option>
+                      <option value="holiday">Holiday Guests</option>
+                    </select>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block mb-1">Recipients</label>
+                <div className="inline-flex border border-light-gray">
+                  <button
+                    type="button"
+                    onClick={() => setRecipientMode("segment")}
+                    className={`text-[10px] tracking-[0.15em] uppercase font-medium px-4 py-2 transition ${recipientMode === "segment" ? "bg-charcoal text-white" : "bg-white text-warm-gray hover:text-charcoal"}`}
+                  >
+                    Segment
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRecipientMode("individual")}
+                    className={`text-[10px] tracking-[0.15em] uppercase font-medium px-4 py-2 transition border-l border-light-gray ${recipientMode === "individual" ? "bg-charcoal text-white" : "bg-white text-warm-gray hover:text-charcoal"}`}
+                  >
+                    Individual Guest
+                  </button>
                 </div>
               </div>
               <div>
@@ -1840,18 +2430,25 @@ export default function GuestsCRMPage() {
 
               <div className="bg-amber-50 border border-amber-200 p-3 text-xs text-amber-700">
                 <p className="font-medium mb-1">Exclusions Applied</p>
-                <ul className="list-disc list-inside space-y-0.5 text-[10px]">
-                  <li>Unsubscribed guests will be excluded</li>
-                  <li>Do-not-contact guests will be excluded</li>
-                  <li>Do-not-host guests will be excluded</li>
-                  {campaignForm.type === "sms" && <li>Guests without SMS opt-in will be excluded</li>}
-                </ul>
+                {recipientMode === "individual" ? (
+                  <p className="text-[10px]">Consent rules still apply — do-not-contact, unsubscribed, or missing-phone guests can&apos;t receive messages.</p>
+                ) : (
+                  <ul className="list-disc list-inside space-y-0.5 text-[10px]">
+                    <li>Unsubscribed guests will be excluded</li>
+                    <li>Do-not-contact guests will be excluded</li>
+                    <li>Do-not-host guests will be excluded</li>
+                    {campaignForm.type === "sms" && <li>Guests without SMS opt-in will be excluded</li>}
+                  </ul>
+                )}
               </div>
 
               <div className="flex gap-2">
                 <button onClick={() => setShowCampaignBuilder(false)} className="flex-1 text-[10px] tracking-[0.15em] uppercase text-charcoal border border-light-gray px-4 py-2.5 hover:bg-cream transition">Cancel</button>
-                <button onClick={saveCampaign} disabled={saving || !campaignForm.name || !campaignForm.body} className="flex-1 bg-charcoal text-white text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-stone transition px-4 py-2.5 disabled:opacity-50">
-                  {saving ? "Saving..." : editingCampaign ? "Update Campaign" : campaignForm.scheduledAt ? "Schedule Campaign" : "Save as Draft"}
+                <button onClick={handleSaveCampaign} disabled={saving || sendingNow || !campaignForm.name || !campaignForm.body} className="flex-1 bg-charcoal text-white text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-stone transition px-4 py-2.5 disabled:opacity-50">
+                  {saving && !sendingNow ? "Saving..." : editingCampaign ? "Update Campaign" : campaignForm.scheduledAt ? "Schedule Campaign" : "Save as Draft"}
+                </button>
+                <button onClick={sendCampaignFromBuilder} disabled={saving || sendingNow || !campaignForm.name || !campaignForm.body || (recipientMode === "individual" && !recipientGuestId)} className="flex-1 bg-charcoal text-white text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-stone transition px-4 py-2.5 disabled:opacity-50 flex items-center justify-center gap-1.5">
+                  <Send size={12} /> {sendingNow ? "Sending..." : "Send Now"}
                 </button>
               </div>
             </div>
@@ -1924,11 +2521,61 @@ export default function GuestsCRMPage() {
               </div>
 
               <div className="flex gap-2">
+                <button
+                  onClick={() => setPreviewTemplate({ name: templateForm.name || "Untitled Template", type: templateForm.type, subject: templateForm.subject, body: templateForm.body })}
+                  disabled={!templateForm.body}
+                  className="text-[10px] tracking-[0.15em] uppercase text-charcoal border border-light-gray px-4 py-2.5 hover:bg-cream transition flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <Eye size={12} /> Preview
+                </button>
                 <button onClick={() => setShowTemplateEditor(false)} className="flex-1 text-[10px] tracking-[0.15em] uppercase text-charcoal border border-light-gray px-4 py-2.5 hover:bg-cream transition">Cancel</button>
                 <button onClick={saveTemplate} disabled={saving || !templateForm.name || !templateForm.body} className="flex-1 bg-charcoal text-white text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-stone transition px-4 py-2.5 disabled:opacity-50">
                   {saving ? "Saving..." : editingTemplate ? "Update Template" : "Save Template"}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {/* TEMPLATE PREVIEW MODAL                                         */}
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {previewTemplate && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setPreviewTemplate(null)} />
+          <div className="relative bg-white w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-xl border border-light-gray">
+            <div className="sticky top-0 bg-white border-b border-light-gray p-4 flex items-center justify-between z-10">
+              <div>
+                <p className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">{previewTemplate.type === "sms" ? "SMS Preview" : "Email Preview"}</p>
+                <h2 className="font-serif text-lg text-charcoal">{previewTemplate.name}</h2>
+              </div>
+              <button onClick={() => setPreviewTemplate(null)} className="text-warm-gray hover:text-charcoal"><X size={18} /></button>
+            </div>
+            <div className="p-4">
+              {previewTemplate.type === "sms" ? (
+                <div className="border border-light-gray rounded-3xl p-4 max-w-sm mx-auto bg-white">
+                  <p className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium text-center mb-3">Avenue10</p>
+                  <div className="max-w-[280px] rounded-2xl bg-gray-200 text-charcoal text-sm p-3 whitespace-pre-wrap">
+                    {stripHtml(renderTemplateVars(previewTemplate.body, PREVIEW_VARS))}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="mb-3">
+                    <p className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium mb-1">Subject</p>
+                    <p className="text-sm text-charcoal">{renderTemplateVars(previewTemplate.subject || "", PREVIEW_VARS) || <span className="text-warm-gray">(no subject)</span>}</p>
+                  </div>
+                  <iframe
+                    title="Email preview"
+                    sandbox=""
+                    srcDoc={wrapEmailHtml(renderTemplateVars(previewTemplate.body, PREVIEW_VARS))}
+                    className="w-full bg-white border border-light-gray"
+                    style={{ height: 520 }}
+                  />
+                </>
+              )}
+              <p className="text-[10px] text-warm-gray mt-3">Preview uses sample guest data. Personalization variables fill in automatically at send time.</p>
             </div>
           </div>
         </div>

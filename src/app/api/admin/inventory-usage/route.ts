@@ -37,6 +37,12 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const totalUsageCost = body.quantityUsed * (body.unitCostAtUsage || 0);
 
+    const item = await prisma.propertyInventory.findUniqueOrThrow({
+      where: { id: body.itemId },
+    });
+    const newQty = Math.max(0, item.quantityOnHand - body.quantityUsed);
+    const inventoryStatus = newQty === 0 ? "missing" : newQty <= item.reorderThreshold && item.reorderThreshold > 0 ? "low_stock" : "ok";
+
     const [usage] = await prisma.$transaction([
       prisma.inventoryUsage.create({
         data: { ...body, totalUsageCost },
@@ -44,8 +50,10 @@ export async function POST(req: NextRequest) {
       prisma.propertyInventory.update({
         where: { id: body.itemId },
         data: {
-          quantityOnHand: { decrement: body.quantityUsed },
+          quantityOnHand: newQty,
+          quantityUsed: { increment: body.quantityUsed },
           remainingValue: { decrement: totalUsageCost },
+          inventoryStatus,
         },
       }),
     ]);

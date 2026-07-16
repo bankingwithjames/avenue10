@@ -52,3 +52,32 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
+export async function PUT(req: NextRequest) {
+  const { error } = await requireAdmin();
+  if (error) return error;
+
+  try {
+    const { id, maintenanceLogId, ...data } = await req.json();
+    if (id) {
+      const event = await prisma.maintenanceCalendarEvent.update({ where: { id }, data });
+      return NextResponse.json(event);
+    }
+    // Update all events belonging to a maintenance log (used when its
+    // scheduled date or title changes from the edit form).
+    if (maintenanceLogId) {
+      const result = await prisma.maintenanceCalendarEvent.updateMany({
+        where: { maintenanceLogId },
+        data,
+      });
+      return NextResponse.json({ updated: result });
+    }
+    return NextResponse.json({ error: "id or maintenanceLogId required" }, { status: 400 });
+  } catch (e) {
+    console.error("PUT /api/admin/maintenance-calendar error:", e);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}

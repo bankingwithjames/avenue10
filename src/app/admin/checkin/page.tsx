@@ -60,7 +60,10 @@ import {
   Send,
   Flag,
   Plug,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
+import { MessagingStatusBanner } from "@/components/admin/MessagingStatusBanner";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -102,7 +105,6 @@ interface Reservation {
 type Tab =
   | "overview"
   | "terms"
-  | "inventory"
   | "instructions"
   | "recommendations"
   | "reviews"
@@ -111,6 +113,13 @@ type Tab =
   | "smartlocks";
 
 // ─── Main Page ──────────────────────────────────────────────────────────────
+
+function scrollToContent(id: string) {
+  // defer so the tab/filter state applies and content renders first
+  setTimeout(() => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "auto", block: "start" });
+  }, 60);
+}
 
 export default function AdminCheckInPage() {
   const [activeSection, setActiveSection] = useState<Tab>("overview");
@@ -183,20 +192,18 @@ export default function AdminCheckInPage() {
     (r) => r.approvalStatus === "pending"
   ).length;
 
-  const statusCards = [
-    { label: "Upcoming Check-ins", value: upcomingCheckins, icon: CalendarCheck },
-    { label: "Terms Signed", value: termsSigned, icon: FileCheck },
-    { label: "Access Unlocked", value: accessUnlocked, icon: Unlock },
-    { label: "Pending Signatures", value: pendingSignatures, icon: Clock },
-    { label: "Open Requests", value: openRequests, icon: MessageSquare },
-    { label: "Inventory Issues", value: 0, icon: AlertTriangle },
-    { label: "Pending Reviews", value: pendingReviews, icon: Star },
+  const statusCards: { label: string; value: number; icon: any; tab?: Tab }[] = [
+    { label: "Upcoming Check-ins", value: upcomingCheckins, icon: CalendarCheck, tab: "overview" },
+    { label: "Terms Signed", value: termsSigned, icon: FileCheck, tab: "terms" },
+    { label: "Access Unlocked", value: accessUnlocked, icon: Unlock, tab: "instructions" },
+    { label: "Pending Signatures", value: pendingSignatures, icon: Clock, tab: "terms" },
+    { label: "Open Requests", value: openRequests, icon: MessageSquare, tab: "requests" },
+    { label: "Pending Reviews", value: pendingReviews, icon: Star, tab: "reviews" },
   ];
 
   const tabs: { key: Tab; label: string; icon: any }[] = [
     { key: "overview", label: "Overview", icon: LayoutDashboard },
     { key: "terms", label: "Terms & Conditions", icon: FileCheck },
-    { key: "inventory", label: "Inventory", icon: ClipboardList },
     { key: "instructions", label: "Instructions & Codes", icon: KeyRound },
     { key: "recommendations", label: "Things to Do", icon: MapPin },
     { key: "reviews", label: "Guest Reviews", icon: Star },
@@ -212,11 +219,14 @@ export default function AdminCheckInPage() {
       </h1>
 
       {/* ─── Status Cards ─────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
         {statusCards.map((card) => (
           <div
             key={card.label}
-            className="bg-white border border-light-gray px-4 py-3"
+            onClick={() => { if (card.tab) { setActiveSection(card.tab); scrollToContent("admin-tab-content"); } }}
+            className={`bg-white border px-4 py-3 cursor-pointer transition-colors ${
+              card.tab === activeSection ? "border-charcoal" : "border-light-gray hover:border-warm-gray"
+            }`}
           >
             <div className="flex items-center gap-2 mb-1">
               <card.icon size={12} className="text-warm-gray" />
@@ -286,7 +296,7 @@ export default function AdminCheckInPage() {
       </div>
 
       {/* ─── Tab Navigation ───────────────────────────────────────────── */}
-      <div className="flex flex-wrap gap-2 mb-6">
+      <div id="admin-tab-content" className="flex flex-wrap gap-2 mb-6">
         {tabs.map((t) => (
           <button
             key={t.key}
@@ -315,13 +325,6 @@ export default function AdminCheckInPage() {
       )}
       {activeSection === "terms" && (
         <TermsTab reservations={reservations} />
-      )}
-      {activeSection === "inventory" && (
-        <InventoryTab
-          listingId={selectedListing}
-          listings={listings}
-          onSelectListing={setSelectedListing}
-        />
       )}
       {activeSection === "instructions" && (
         <InstructionsTab
@@ -986,10 +989,11 @@ function InventoryTab({
                 </label>
                 <input
                   type="number"
-                  value={newCost}
+                  value={newCost || ""}
                   onChange={(e) => setNewCost(parseFloat(e.target.value) || 0)}
                   min={0}
                   step={0.01}
+                  placeholder="0.00"
                   className="w-full border border-light-gray px-3 py-2.5 text-sm text-charcoal focus:outline-none focus:border-charcoal"
                 />
               </div>
@@ -1305,11 +1309,12 @@ function InstructionsTab({
                 </label>
                 <input
                   type="number"
-                  value={newVisibleHours}
+                  value={newVisibleHours || ""}
                   onChange={(e) =>
                     setNewVisibleHours(parseInt(e.target.value) || 0)
                   }
                   min={0}
+                  placeholder="0"
                   className="w-full border border-light-gray px-3 py-2.5 text-sm text-charcoal focus:outline-none focus:border-charcoal"
                 />
               </div>
@@ -2591,132 +2596,255 @@ function RequestsTab({
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// TAB 8: AUTOMATIONS
+// TAB 8: AUTOMATIONS (shared with Guest CRM)
 // ═══════════════════════════════════════════════════════════════════════════
 
+interface AutomationRecord {
+  id: string;
+  name: string;
+  trigger: string;
+  templateId: string | null;
+  delay: string | null;
+  isActive: boolean;
+  conditions: string | null;
+  sortOrder: number;
+}
+
+interface AutomationTemplateRecord {
+  id: string;
+  name: string;
+  category: string;
+  isActive: boolean;
+}
+
 function AutomationsTab() {
-  const [toggles, setToggles] = useState<Record<string, boolean>>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const stored = localStorage.getItem("avenue10-automations");
-        if (stored) return JSON.parse(stored);
-      } catch {}
-    }
-    return {};
-  });
+  const [automations, setAutomations] = useState<AutomationRecord[]>([]);
+  const [templates, setTemplates] = useState<AutomationTemplateRecord[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  function toggle(key: string) {
-    setToggles((prev) => {
-      const next = { ...prev, [key]: !prev[key] };
-      try {
-        localStorage.setItem("avenue10-automations", JSON.stringify(next));
-      } catch {}
-      return next;
+  const fetchAutomations = useCallback(async () => {
+    try {
+      const [r, tr] = await Promise.allSettled([
+        fetch("/api/admin/automations"),
+        fetch("/api/admin/templates"),
+      ]);
+      if (r.status === "fulfilled" && r.value.ok) setAutomations(await r.value.json());
+      if (tr.status === "fulfilled" && tr.value.ok) {
+        const data = await tr.value.json();
+        setTemplates(Array.isArray(data) ? data : []);
+      }
+    } catch {}
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchAutomations(); }, [fetchAutomations]);
+
+  const toggleAutomation = async (auto: AutomationRecord) => {
+    try {
+      await fetch(`/api/admin/automations/${auto.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !auto.isActive }),
+      });
+      await fetchAutomations();
+    } catch {}
+  };
+
+  const updateTemplate = async (auto: AutomationRecord, templateId: string) => {
+    try {
+      await fetch(`/api/admin/automations/${auto.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ templateId: templateId || null }),
+      });
+      await fetchAutomations();
+    } catch {}
+  };
+
+  const updateDelay = async (auto: AutomationRecord, newDelay: string) => {
+    try {
+      await fetch(`/api/admin/automations/${auto.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ delay: newDelay }),
+      });
+      await fetchAutomations();
+    } catch {}
+  };
+
+  const reorder = async (index: number, direction: "up" | "down") => {
+    const sorted = [...automations].sort((a, b) => a.sortOrder - b.sortOrder);
+    const swapIndex = direction === "up" ? index - 1 : index + 1;
+    if (swapIndex < 0 || swapIndex >= sorted.length) return;
+    const order = sorted.map((a, i) => {
+      if (i === index) return { id: a.id, sortOrder: sorted[swapIndex].sortOrder };
+      if (i === swapIndex) return { id: a.id, sortOrder: sorted[index].sortOrder };
+      return { id: a.id, sortOrder: a.sortOrder };
     });
-  }
+    try {
+      await fetch("/api/admin/automations/reorder", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order }),
+      });
+      await fetchAutomations();
+    } catch {}
+  };
 
-  const automations = [
-    {
-      key: "portal-link",
-      title: "Send portal link after booking",
-      description:
-        "Automatically sends a guest portal link via email when a new reservation is confirmed.",
-      icon: Send,
-    },
-    {
-      key: "remind-terms",
-      title: "Remind guest to sign terms (24h before)",
-      description:
-        "Sends a reminder email 24 hours before check-in if the guest has not yet signed the terms agreement.",
-      icon: Bell,
-    },
-    {
-      key: "unlock-codes",
-      title: "Unlock codes after terms signed",
-      description:
-        "Automatically reveals sensitive check-in instructions (door codes, etc.) after the guest signs the terms agreement.",
-      icon: Unlock,
-    },
-    {
-      key: "checkout-reminder",
-      title: "Send checkout reminder",
-      description:
-        "Sends checkout instructions and a reminder the morning of the guest's departure.",
-      icon: CalendarCheck,
-    },
-    {
-      key: "review-request",
-      title: "Send review request after checkout",
-      description:
-        "Sends a follow-up email requesting a review 24 hours after the guest's check-out date.",
-      icon: Star,
-    },
-    {
-      key: "notify-request",
-      title: "Notify admin on guest request",
-      description:
-        "Sends an immediate notification to the admin when a guest submits a new request through the portal.",
-      icon: AlertCircle,
-    },
-    {
-      key: "notify-cleaner",
-      title: "Notify cleaner after checkout",
-      description:
-        "Sends an automated notification to the assigned cleaning staff when a guest checks out.",
-      icon: Mail,
-    },
-    {
-      key: "flag-inventory",
-      title: "Flag inventory issue on guest report",
-      description:
-        "Automatically creates an inventory issue flag when a guest reports a damaged or missing item.",
-      icon: Flag,
-    },
+  const defaultAutomations = [
+    { trigger: "booking-confirmed", name: "Send booking confirmation", delay: "0h", description: "Immediately after booking is confirmed" },
+    { trigger: "booking-confirmed", name: "Send portal link", delay: "1h", description: "1 hour after booking confirmation" },
+    { trigger: "terms-unsigned", name: "Terms reminder", delay: "48h", description: "If terms unsigned after 48 hours" },
+    { trigger: "pre-arrival", name: "Check-in instructions", delay: "24h", description: "24 hours before check-in" },
+    { trigger: "access-unlocked", name: "Door code available", delay: "0h", description: "When access window opens" },
+    { trigger: "during-stay", name: "During-stay check-in", delay: "24h", description: "After first night of stay" },
+    { trigger: "checkout-day", name: "Checkout reminder", delay: "0h", description: "Morning of checkout day" },
+    { trigger: "post-checkout", name: "Review request", delay: "24h", description: "24 hours after checkout" },
+    { trigger: "post-checkout", name: "Repeat guest offer", delay: "14d", description: "14 days after checkout" },
+    { trigger: "win-back", name: "Win-back campaign", delay: "6m", description: "6 months after last stay" },
   ];
 
+  const delayOptions = [
+    { value: "0h", label: "Immediately" }, { value: "15m", label: "15 minutes" }, { value: "30m", label: "30 minutes" },
+    { value: "1h", label: "1 hour" }, { value: "2h", label: "2 hours" }, { value: "4h", label: "4 hours" },
+    { value: "6h", label: "6 hours" }, { value: "12h", label: "12 hours" }, { value: "24h", label: "24 hours" },
+    { value: "48h", label: "48 hours" }, { value: "72h", label: "3 days" }, { value: "7d", label: "7 days" },
+    { value: "14d", label: "14 days" }, { value: "30d", label: "30 days" }, { value: "3m", label: "3 months" }, { value: "6m", label: "6 months" },
+  ];
+
+  const sorted = [...automations].sort((a, b) => a.sortOrder - b.sortOrder);
+  const uninitialized = defaultAutomations.filter(
+    da => !automations.some(a => a.trigger === da.trigger && a.name === da.name)
+  );
+
+  if (loading) return <p className="text-sm text-warm-gray py-8 text-center">Loading automations...</p>;
+
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between mb-2">
-        <div>
-          <h2 className="text-sm font-medium text-charcoal">
-            Automation Rules
-          </h2>
-          <p className="text-xs text-warm-gray mt-0.5">
-            Configure automated workflows for your guest portal operations.
-          </p>
-        </div>
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+        <p className="text-xs text-warm-gray">{automations.length} automation rules</p>
+        <p className="text-[10px] text-warm-gray">Use arrows to reorder execution sequence</p>
       </div>
 
-      {automations.map((auto) => (
-        <div
-          key={auto.key}
-          className="bg-white border border-light-gray px-6 py-4 flex items-center gap-4"
-        >
-          <div className="shrink-0 w-10 h-10 bg-cream/70 border border-light-gray flex items-center justify-center">
-            <auto.icon size={18} className="text-charcoal/60" />
-          </div>
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-0.5">
-              <h3 className="text-sm font-medium text-charcoal">
-                {auto.title}
-              </h3>
-              <Badge color="amber">Coming Soon</Badge>
+      <div className="space-y-2">
+        {sorted.map((auto, idx) => {
+          const da = defaultAutomations.find(d => d.trigger === auto.trigger && d.name === auto.name);
+          const description = da?.description || auto.trigger;
+          return (
+            <div key={auto.id} className="bg-white border border-light-gray p-4 flex flex-wrap items-center gap-3">
+              <div className="flex flex-col gap-0.5 shrink-0">
+                <button onClick={() => reorder(idx, "up")} disabled={idx === 0} className="text-warm-gray hover:text-charcoal disabled:opacity-20 disabled:cursor-not-allowed p-0.5 transition" title="Move up">
+                  <ArrowUp size={12} />
+                </button>
+                <button onClick={() => reorder(idx, "down")} disabled={idx === sorted.length - 1} className="text-warm-gray hover:text-charcoal disabled:opacity-20 disabled:cursor-not-allowed p-0.5 transition" title="Move down">
+                  <ArrowDown size={12} />
+                </button>
+              </div>
+              <div className="w-6 h-6 bg-cream border border-light-gray flex items-center justify-center text-[10px] font-medium text-warm-gray shrink-0">{idx + 1}</div>
+              <div className={`w-8 h-8 flex items-center justify-center shrink-0 ${auto.isActive ? "bg-emerald-50 text-emerald-600" : "bg-gray-100 text-warm-gray"}`}>
+                <Zap size={14} />
+              </div>
+              <div className="flex-1 min-w-[150px]">
+                <h3 className="text-sm font-medium text-charcoal">{auto.name}</h3>
+                <p className="text-xs text-warm-gray">{description}</p>
+              </div>
+              {/* Controls — wrap to their own line on mobile */}
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              {(() => {
+                const activeTemplates = templates.filter(t => t.isActive);
+                const matching = activeTemplates.filter(t => t.category === auto.trigger);
+                const others = activeTemplates.filter(t => t.category !== auto.trigger);
+                return (
+                  <select
+                    value={auto.templateId || ""}
+                    onChange={(e) => updateTemplate(auto, e.target.value)}
+                    className="text-[10px] border border-light-gray bg-cream text-charcoal px-2 py-1.5 outline-none focus:border-charcoal/40 shrink-0 cursor-pointer max-w-[220px] truncate"
+                    title="Message template"
+                  >
+                    <option value="">Default message</option>
+                    {matching.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                    {others.length > 0 && (
+                      <optgroup label="— Other templates —">
+                        {others.map(t => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+                );
+              })()}
+              <select
+                value={auto.delay || "0h"}
+                onChange={(e) => updateDelay(auto, e.target.value)}
+                className="text-[10px] border border-light-gray bg-cream text-charcoal px-2 py-1.5 outline-none focus:border-charcoal/40 shrink-0 cursor-pointer max-w-full"
+              >
+                {delayOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+              </select>
+              <button onClick={() => toggleAutomation(auto)} className={`w-10 h-5 rounded-full transition relative shrink-0 ${auto.isActive ? "bg-emerald-500" : "bg-gray-300"}`}>
+                <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 transition-all ${auto.isActive ? "left-5" : "left-0.5"}`} />
+              </button>
+              </div>
             </div>
-            <p className="text-xs text-warm-gray">{auto.description}</p>
+          );
+        })}
+
+        {uninitialized.length > 0 && sorted.length > 0 && (
+          <div className="border-t border-light-gray mt-4 pt-4">
+            <p className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium mb-2">Available Automations</p>
           </div>
+        )}
+        {uninitialized.map((da, i) => (
+          <div key={`unset-${i}`} className="bg-white border border-light-gray border-dashed p-4 flex flex-wrap items-center justify-between gap-2 opacity-60">
+            <div className="flex items-center gap-3 flex-1 min-w-[150px]">
+              <div className="w-8 h-8 flex items-center justify-center shrink-0 bg-gray-100 text-warm-gray"><Zap size={14} /></div>
+              <div className="min-w-0">
+                <h3 className="text-sm font-medium text-charcoal">{da.name}</h3>
+                <p className="text-xs text-warm-gray">{da.description}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <span className="text-[9px] tracking-[0.1em] uppercase font-medium px-2 py-0.5 text-warm-gray bg-cream">{da.delay}</span>
+              <button
+                onClick={async () => {
+                  await fetch("/api/admin/automations", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ name: da.name, trigger: da.trigger, delay: da.delay, isActive: false }),
+                  });
+                  await fetchAutomations();
+                }}
+                className="text-[10px] text-charcoal border border-light-gray px-2 py-1 hover:bg-cream transition"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+        ))}
+
+        {automations.length === 0 && (
           <button
-            onClick={() => toggle(auto.key)}
-            className="shrink-0"
+            onClick={async () => {
+              for (let i = 0; i < defaultAutomations.length; i++) {
+                const da = defaultAutomations[i];
+                await fetch("/api/admin/automations", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ name: da.name, trigger: da.trigger, delay: da.delay, isActive: false, sortOrder: i }),
+                });
+              }
+              await fetchAutomations();
+            }}
+            className="w-full bg-charcoal text-white text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-stone transition px-4 py-3 mt-2"
           >
-            {toggles[auto.key] ? (
-              <ToggleRight size={28} className="text-charcoal" />
-            ) : (
-              <ToggleLeft size={28} className="text-warm-gray" />
-            )}
+            Initialize All Automations
           </button>
-        </div>
-      ))}
-    </div>
+        )}
+      </div>
+
+      <MessagingStatusBanner />
+    </>
   );
 }
 

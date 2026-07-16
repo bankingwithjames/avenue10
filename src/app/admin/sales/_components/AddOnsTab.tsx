@@ -106,7 +106,7 @@ function AddOnRow({
 
       {expanded && (
         <div className="px-2 pb-4 pt-1 bg-cream/30">
-          <div className="grid grid-cols-3 gap-3 mb-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
             <div>
               <label className={labelClass}>Name</label>
               <input
@@ -143,7 +143,7 @@ function AddOnRow({
               </select>
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-3 mb-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
             <div>
               <label className={labelClass}>Category</label>
               <select
@@ -169,7 +169,7 @@ function AddOnRow({
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
             <Toggle
               label="Guest Visible"
               checked={addOn.guestVisible}

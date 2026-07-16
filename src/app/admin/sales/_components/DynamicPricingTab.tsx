@@ -393,13 +393,13 @@ export default function DynamicPricingTab({
 
           {dynamicPricing.enabled && (
             <>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <SelectInput label="Pricing Mode" value={dynamicPricing.pricingMode} onChange={(v) => onUpdateDynamic("pricingMode", v)} options={[{ value: "conservative", label: "Conservative" }, { value: "balanced", label: "Balanced" }, { value: "aggressive", label: "Aggressive" }]} />
                 <NumberInput label="Minimum Rate" value={dynamicPricing.minimumRate} onChange={(v) => onUpdateDynamic("minimumRate", v)} prefix="$" />
                 <NumberInput label="Maximum Rate" value={dynamicPricing.maximumRate} onChange={(v) => onUpdateDynamic("maximumRate", v)} prefix="$" />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <NumberInput label="Weekend Premium" value={dynamicPricing.weekendPremiumPercent} onChange={(v) => onUpdateDynamic("weekendPremiumPercent", v)} suffix="%" step={0.5} />
                 <NumberInput label="Event Premium" value={dynamicPricing.eventPremiumPercent} onChange={(v) => onUpdateDynamic("eventPremiumPercent", v)} suffix="%" step={0.5} />
                 <NumberInput label="Gap-Night Discount" value={dynamicPricing.gapNightDiscountPercent} onChange={(v) => onUpdateDynamic("gapNightDiscountPercent", v)} suffix="%" step={0.5} />
@@ -448,7 +448,7 @@ export default function DynamicPricingTab({
             {occupancy.isEnabled && (
               <>
                 <SelectInput label="Occupancy Window" value={String(occupancy.occupancyWindowDays)} onChange={(v) => setOccupancy({ ...occupancy, occupancyWindowDays: Number(v) })} options={[{ value: "7", label: "7 days" }, { value: "14", label: "14 days" }, { value: "30", label: "30 days" }, { value: "60", label: "60 days" }, { value: "90", label: "90 days" }]} />
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <NumberInput label="Low Occupancy Threshold" value={occupancy.lowOccupancyThreshold} onChange={(v) => setOccupancy({ ...occupancy, lowOccupancyThreshold: v })} suffix="%" />
                   <NumberInput label="High Occupancy Threshold" value={occupancy.highOccupancyThreshold} onChange={(v) => setOccupancy({ ...occupancy, highOccupancyThreshold: v })} suffix="%" />
                   <NumberInput label="Low Occupancy Decrease" value={occupancy.lowOccupancyAdjustmentPercent} onChange={(v) => setOccupancy({ ...occupancy, lowOccupancyAdjustmentPercent: v })} suffix="%" />
@@ -486,7 +486,7 @@ export default function DynamicPricingTab({
             {bookingPace.isEnabled && (
               <>
                 <SelectInput label="Comparison Period" value={String(bookingPace.comparisonPeriodDays)} onChange={(v) => setBookingPace({ ...bookingPace, comparisonPeriodDays: Number(v) })} options={[{ value: "30", label: "Last 30 days" }, { value: "60", label: "Last 60 days" }, { value: "90", label: "Last 90 days" }, { value: "180", label: "Last 180 days" }]} />
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <NumberInput label="Fast Pace Threshold" value={bookingPace.fastPaceThresholdPercent} onChange={(v) => setBookingPace({ ...bookingPace, fastPaceThresholdPercent: v })} suffix="%" />
                   <NumberInput label="Slow Pace Threshold" value={bookingPace.slowPaceThresholdPercent} onChange={(v) => setBookingPace({ ...bookingPace, slowPaceThresholdPercent: v })} suffix="%" />
                   <NumberInput label="Fast Pace Increase" value={bookingPace.fastPaceAdjustmentPercent} onChange={(v) => setBookingPace({ ...bookingPace, fastPaceAdjustmentPercent: v })} suffix="%" />
@@ -494,7 +494,7 @@ export default function DynamicPricingTab({
                   <NumberInput label="Max Adjustment" value={bookingPace.maxAdjustmentPercent} onChange={(v) => setBookingPace({ ...bookingPace, maxAdjustmentPercent: v })} suffix="%" />
                 </div>
                 <p className={labelClass}>Lead Time Windows</p>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {["0-7 days", "8-30 days", "31-90 days", "90+ days"].map((w) => (
                     <div key={w} className="bg-cream/50 border border-light-gray px-2 py-1.5 text-center">
                       <span className="text-[9px] text-warm-gray">{w}</span>
@@ -528,7 +528,7 @@ export default function DynamicPricingTab({
             <Toggle label="Enable Market Comp Adjustment" checked={marketComp.isEnabled} onChange={(v) => setMarketComp({ ...marketComp, isEnabled: v })} />
             {marketComp.isEnabled && (
               <>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <SelectInput label="Market Data Source" value={marketComp.marketDataSource} onChange={(v) => setMarketComp({ ...marketComp, marketDataSource: v })} options={[{ value: "manual", label: "Manual Entry" }, { value: "airdna", label: "AirDNA" }, { value: "pricelabs", label: "PriceLabs" }, { value: "wheelhouse", label: "Wheelhouse" }, { value: "beyond", label: "Beyond Pricing" }, { value: "custom", label: "Custom" }]} />
                   <NumberInput label="Comp Radius" value={marketComp.compRadiusMiles} onChange={(v) => setMarketComp({ ...marketComp, compRadiusMiles: v })} suffix="mi" />
                   <SelectInput label="Property Type" value={marketComp.compPropertyType} onChange={(v) => setMarketComp({ ...marketComp, compPropertyType: v })} options={[{ value: "entire_home", label: "Entire Home" }, { value: "private_room", label: "Private Room" }, { value: "shared_room", label: "Shared Room" }, { value: "any", label: "Any" }]} />
@@ -595,7 +595,7 @@ export default function DynamicPricingTab({
                 {/* New lock form */}
                 <div className="border border-dashed border-light-gray p-4 space-y-3">
                   <p className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium flex items-center gap-1"><Plus size={10} /> Create New Lock</p>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <label className={labelClass}>Start Date</label>
                       <input type="date" className={inputClass} value={newLock.startDate} onChange={(e) => setNewLock({ ...newLock, startDate: e.target.value })} />

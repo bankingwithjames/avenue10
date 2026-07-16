@@ -137,6 +137,13 @@ function setArchivedIds(ids: string[]) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+function scrollToContent(id: string) {
+  // defer so the tab/filter state applies and content renders first
+  setTimeout(() => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "auto", block: "start" });
+  }, 60);
+}
+
 export default function AdminMediaPage() {
   // Core state
   const [media, setMedia] = useState<MediaItem[]>([]);
@@ -633,42 +640,60 @@ export default function AdminMediaPage() {
 
       {/* Stats Bar */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-        <div className="bg-white border border-light-gray p-4">
+        <div
+          onClick={() => { setTypeFilter("image"); scrollToContent("admin-tab-content"); }}
+          className={`bg-white border p-4 cursor-pointer transition-colors ${typeFilter === "image" ? "border-charcoal" : "border-light-gray hover:border-warm-gray"}`}
+        >
           <div className="flex items-center gap-2 mb-1">
             <ImageIcon size={14} className="text-warm-gray" />
             <span className={labelClass}>Photos</span>
           </div>
           <p className="text-lg font-medium text-charcoal">{imageCount}</p>
         </div>
-        <div className="bg-white border border-light-gray p-4">
+        <div
+          onClick={() => { setTypeFilter("video"); scrollToContent("admin-tab-content"); }}
+          className={`bg-white border p-4 cursor-pointer transition-colors ${typeFilter === "video" ? "border-charcoal" : "border-light-gray hover:border-warm-gray"}`}
+        >
           <div className="flex items-center gap-2 mb-1">
             <Film size={14} className="text-warm-gray" />
             <span className={labelClass}>Videos</span>
           </div>
           <p className="text-lg font-medium text-charcoal">{videoCount}</p>
         </div>
-        <div className="bg-white border border-light-gray p-4">
+        <div
+          onClick={() => { setTypeFilter("all"); setStatusFilter("all"); scrollToContent("admin-tab-content"); }}
+          className="bg-white border border-light-gray p-4 cursor-pointer transition-colors hover:border-warm-gray"
+        >
           <div className="flex items-center gap-2 mb-1">
             <HardDrive size={14} className="text-warm-gray" />
             <span className={labelClass}>Total Size</span>
           </div>
           <p className="text-lg font-medium text-charcoal">{formatBytes(totalSize)}</p>
         </div>
-        <div className="bg-white border border-light-gray p-4">
+        <div
+          onClick={() => { setStatusFilter("in-use"); scrollToContent("admin-tab-content"); }}
+          className={`bg-white border p-4 cursor-pointer transition-colors ${statusFilter === "in-use" ? "border-charcoal" : "border-light-gray hover:border-warm-gray"}`}
+        >
           <div className="flex items-center gap-2 mb-1">
             <Link2 size={14} className="text-warm-gray" />
             <span className={labelClass}>In Use</span>
           </div>
           <p className="text-lg font-medium text-charcoal">{inUseCount}</p>
         </div>
-        <div className="bg-white border border-light-gray p-4">
+        <div
+          onClick={() => { setStatusFilter("not-used"); scrollToContent("admin-tab-content"); }}
+          className={`bg-white border p-4 cursor-pointer transition-colors ${statusFilter === "not-used" ? "border-charcoal" : "border-light-gray hover:border-warm-gray"}`}
+        >
           <div className="flex items-center gap-2 mb-1">
             <Ban size={14} className="text-warm-gray" />
             <span className={labelClass}>Not Used</span>
           </div>
           <p className="text-lg font-medium text-charcoal">{notUsedCount}</p>
         </div>
-        <div className="bg-white border border-light-gray p-4">
+        <div
+          onClick={() => { setStatusFilter("archived"); scrollToContent("admin-tab-content"); }}
+          className={`bg-white border p-4 cursor-pointer transition-colors ${statusFilter === "archived" ? "border-charcoal" : "border-light-gray hover:border-warm-gray"}`}
+        >
           <div className="flex items-center gap-2 mb-1">
             <Archive size={14} className="text-warm-gray" />
             <span className={labelClass}>Archived</span>
@@ -716,7 +741,7 @@ export default function AdminMediaPage() {
       </div>
 
       {/* Toolbar */}
-      <div className="bg-white border border-light-gray p-4 mb-6">
+      <div id="admin-tab-content" className="bg-white border border-light-gray p-4 mb-6">
         <div className="flex flex-wrap items-center gap-3">
           {/* Search */}
           <div className="relative flex-1 min-w-[200px]">
@@ -1438,7 +1463,7 @@ export default function AdminMediaPage() {
               {/* Display Order */}
               <div>
                 <label className={labelClass}>Display Order</label>
-                <input type="number" value={assignDisplayOrder} onChange={(e) => setAssignDisplayOrder(parseInt(e.target.value) || 0)} className={inputClass} min={0} />
+                <input type="number" value={assignDisplayOrder || ""} onChange={(e) => setAssignDisplayOrder(parseInt(e.target.value) || 0)} className={inputClass} min={0} placeholder="0" />
               </div>
             </div>
 

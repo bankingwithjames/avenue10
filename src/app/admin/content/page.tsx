@@ -220,6 +220,13 @@ const fontWeightOptions = [
   { label: "Bold", value: "700" },
 ];
 
+function scrollToContent(id: string) {
+  // defer so the tab/filter state applies and content renders first
+  setTimeout(() => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "auto", block: "start" });
+  }, 60);
+}
+
 export default function AdminContentPage() {
   const [content, setContent] = useState<SiteContent[]>([]);
   const [editedValues, setEditedValues] = useState<Record<string, string>>({});
@@ -1587,7 +1594,7 @@ export default function AdminContentPage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+      <div id="admin-publish-controls" className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-3">
           <h1 className="font-serif text-2xl text-charcoal font-light">Website Content</h1>
           {/* Publish status badge */}
@@ -1712,21 +1719,33 @@ export default function AdminContentPage() {
 
       {/* Stats Bar */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5">
-        <div className="bg-white border border-light-gray px-4 py-3">
+        <div
+          onClick={() => { setActiveTab("homepage"); scrollToContent("admin-tab-content"); }}
+          className={`bg-white border px-4 py-3 cursor-pointer transition-colors ${activeTab !== "page-media" && activeTab !== "listing-gallery" ? "border-charcoal" : "border-light-gray hover:border-warm-gray"}`}
+        >
           <span className={labelClass}>Total Fields</span>
           <p className="text-lg font-serif text-charcoal font-light">
             {content.filter((c) => c.section !== "checkin").length}
           </p>
         </div>
-        <div className="bg-white border border-light-gray px-4 py-3">
+        <div
+          onClick={() => { setActiveTab("page-media"); scrollToContent("admin-tab-content"); }}
+          className={`bg-white border px-4 py-3 cursor-pointer transition-colors ${activeTab === "page-media" ? "border-charcoal" : "border-light-gray hover:border-warm-gray"}`}
+        >
           <span className={labelClass}>Media Assigned</span>
           <p className="text-lg font-serif text-charcoal font-light">{pageMedia.length}</p>
         </div>
-        <div className="bg-white border border-light-gray px-4 py-3">
+        <div
+          onClick={() => { setActiveTab("listing-gallery"); scrollToContent("admin-tab-content"); }}
+          className={`bg-white border px-4 py-3 cursor-pointer transition-colors ${activeTab === "listing-gallery" ? "border-charcoal" : "border-light-gray hover:border-warm-gray"}`}
+        >
           <span className={labelClass}>Gallery Items</span>
           <p className="text-lg font-serif text-charcoal font-light">{listingGallery.length}</p>
         </div>
-        <div className="bg-white border border-light-gray px-4 py-3">
+        <div
+          onClick={() => scrollToContent("admin-publish-controls")}
+          className="bg-white border border-light-gray px-4 py-3 cursor-pointer transition-colors hover:border-warm-gray"
+        >
           <span className={labelClass}>Publish Status</span>
           <div className="flex items-center gap-1.5 mt-0.5">
             <span
@@ -1737,7 +1756,10 @@ export default function AdminContentPage() {
             <p className="text-sm text-charcoal font-light capitalize">{publishStatus}</p>
           </div>
         </div>
-        <div className="bg-white border border-light-gray px-4 py-3">
+        <div
+          onClick={() => scrollToContent("admin-publish-controls")}
+          className="bg-white border border-light-gray px-4 py-3 cursor-pointer transition-colors hover:border-warm-gray"
+        >
           <span className={labelClass}>Last Published</span>
           <div className="flex items-center gap-1.5 mt-0.5">
             <Clock size={12} className="text-warm-gray" />
@@ -1753,7 +1775,7 @@ export default function AdminContentPage() {
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex gap-1 border-b border-light-gray mb-6 overflow-x-auto">
+      <div id="admin-tab-content" className="flex gap-1 border-b border-light-gray mb-6 overflow-x-auto">
         {tabs.map((tab) => {
           const count =
             tab.key === "homepage" || tab.key === "amenities" || tab.key === "footer"

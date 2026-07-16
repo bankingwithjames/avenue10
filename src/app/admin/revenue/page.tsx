@@ -1,7 +1,8 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { DataTable, DataTableColumn } from "@/components/admin/DataTable";
 import {
   DollarSign,
   TrendingUp,
@@ -29,7 +30,6 @@ import {
   Building2,
   Star,
   CalendarDays,
-  Filter,
   Info,
   Settings,
   ThumbsUp,
@@ -195,6 +195,111 @@ const FORECAST_DATES = [
   { date: "Aug 1", day: "Fri", status: "High Demand" as const },
   { date: "Aug 2", day: "Sat", status: "High Demand" as const },
 ];
+
+const STATUS_RECOMMENDATIONS: Record<string, string> = {
+  "High Demand": "Consider increasing rate 15-25%",
+  "Low Demand": "Enable last-minute discount",
+  "Needs Price Adjustment": "Rate may be too high — review competitors",
+  "Needs Promotion": "Create special offer or reduce minimum stay",
+};
+
+const EXPENSE_ROWS = [
+  { date: "Jul 3", cat: "Cleaning", sub: "Deep Clean", vendor: "Maria's Cleaning Co", amount: 150, payment: "Zelle", status: "Paid", freq: "Per Stay", booking: "BK-1042" },
+  { date: "Jul 3", cat: "Laundry", sub: "Linens", vendor: "Fresh Fold Laundry", amount: 45, payment: "Card", status: "Paid", freq: "Per Stay", booking: "BK-1042" },
+  { date: "Jul 2", cat: "Supplies", sub: "Toiletries", vendor: "Amazon", amount: 62, payment: "Card", status: "Paid", freq: "Monthly", booking: "-" },
+  { date: "Jul 1", cat: "Utilities", sub: "Electricity", vendor: "Oncor/TXU", amount: 180, payment: "Auto-Pay", status: "Paid", freq: "Monthly", booking: "-" },
+  { date: "Jul 1", cat: "Utilities", sub: "Water", vendor: "City of Arlington", amount: 85, payment: "Auto-Pay", status: "Paid", freq: "Monthly", booking: "-" },
+  { date: "Jul 1", cat: "Utilities", sub: "Gas", vendor: "Atmos Energy", amount: 45, payment: "Auto-Pay", status: "Paid", freq: "Monthly", booking: "-" },
+  { date: "Jul 1", cat: "Utilities", sub: "Internet", vendor: "AT&T Fiber", amount: 80, payment: "Auto-Pay", status: "Paid", freq: "Monthly", booking: "-" },
+  { date: "Jul 1", cat: "Insurance", sub: "STR Policy", vendor: "Proper Insurance", amount: 200, payment: "Auto-Pay", status: "Paid", freq: "Monthly", booking: "-" },
+  { date: "Jul 1", cat: "Mortgage", sub: "Principal + Interest", vendor: "Wells Fargo", amount: 1500, payment: "Auto-Pay", status: "Paid", freq: "Monthly", booking: "-" },
+  { date: "Jun 30", cat: "Cleaning", sub: "Turnover Clean", vendor: "Maria's Cleaning Co", amount: 95, payment: "Zelle", status: "Paid", freq: "Per Stay", booking: "BK-1041" },
+  { date: "Jun 28", cat: "Repairs", sub: "Plumbing", vendor: "DFW Plumbing Pros", amount: 275, payment: "Check", status: "Paid", freq: "One-time", booking: "-" },
+  { date: "Jun 25", cat: "Supplies", sub: "Kitchen", vendor: "Costco", amount: 48, payment: "Card", status: "Paid", freq: "As Needed", booking: "-" },
+  { date: "Jun 22", cat: "Lawn Care", sub: "Mowing", vendor: "Green Lawns DFW", amount: 100, payment: "Venmo", status: "Paid", freq: "Bi-weekly", booking: "-" },
+  { date: "Jun 20", cat: "Software", sub: "PMS", vendor: "Hospitable", amount: 25, payment: "Card", status: "Paid", freq: "Monthly", booking: "-" },
+  { date: "Jun 18", cat: "Supplies", sub: "Cleaning", vendor: "Home Depot", amount: 34, payment: "Card", status: "Paid", freq: "As Needed", booking: "-" },
+];
+
+const BILL_ROWS = [
+  { name: "Mortgage", provider: "Wells Fargo", amount: 1500, freq: "Monthly", due: "1st", status: "Paid", auto: true },
+  { name: "Water", provider: "City of Arlington", amount: 85, freq: "Monthly", due: "15th", status: "Paid", auto: true },
+  { name: "Electricity", provider: "Oncor/TXU", amount: 180, freq: "Monthly", due: "10th", status: "Paid", auto: true },
+  { name: "Gas", provider: "Atmos Energy", amount: 45, freq: "Monthly", due: "12th", status: "Paid", auto: true },
+  { name: "Internet", provider: "AT&T Fiber", amount: 80, freq: "Monthly", due: "5th", status: "Paid", auto: true },
+  { name: "Insurance", provider: "Proper Insurance", amount: 200, freq: "Monthly", due: "1st", status: "Paid", auto: true },
+  { name: "Property Tax", provider: "Tarrant County", amount: 400, freq: "Monthly", due: "1st", status: "Paid", auto: false },
+  { name: "Trash", provider: "Republic Services", amount: 35, freq: "Monthly", due: "20th", status: "Due", auto: false },
+  { name: "Lawn Care", provider: "Green Lawns DFW", amount: 100, freq: "Bi-weekly", due: "Every other Fri", status: "Paid", auto: false },
+  { name: "Pest Control", provider: "ABC Home & Commercial", amount: 50, freq: "Quarterly", due: "Jul 15", status: "Due", auto: false },
+  { name: "Security", provider: "Ring/SimpliSafe", amount: 25, freq: "Monthly", due: "8th", status: "Paid", auto: true },
+  { name: "Software", provider: "Hospitable + PriceLabs", amount: 75, freq: "Monthly", due: "1st", status: "Paid", auto: true },
+  { name: "HOA", provider: "Arlington HOA", amount: 150, freq: "Monthly", due: "1st", status: "Overdue", auto: false },
+];
+
+const INVENTORY_ROWS = [
+  { item: "Queen Sheet Sets", cat: "Linens", qty: 6, reorder: 4, cost: 45, condition: "Good", lastPurchased: "Jun 10" },
+  { item: "Bath Towel Sets", cat: "Linens", qty: 8, reorder: 6, cost: 28, condition: "Good", lastPurchased: "May 22" },
+  { item: "Pillow Protectors", cat: "Linens", qty: 10, reorder: 8, cost: 12, condition: "Fair", lastPurchased: "Apr 15" },
+  { item: "Duvet Inserts", cat: "Linens", qty: 3, reorder: 3, cost: 65, condition: "Fair", lastPurchased: "Mar 1" },
+  { item: "Shampoo (bulk)", cat: "Toiletries", qty: 2, reorder: 3, cost: 18, condition: "N/A", lastPurchased: "Jun 28" },
+  { item: "Body Wash (bulk)", cat: "Toiletries", qty: 2, reorder: 3, cost: 16, condition: "N/A", lastPurchased: "Jun 28" },
+  { item: "Hand Soap Refills", cat: "Toiletries", qty: 4, reorder: 4, cost: 8, condition: "N/A", lastPurchased: "Jun 15" },
+  { item: "Toilet Paper (case)", cat: "Toiletries", qty: 1, reorder: 2, cost: 32, condition: "N/A", lastPurchased: "Jun 5" },
+  { item: "Coffee Pods (box)", cat: "Kitchen", qty: 3, reorder: 2, cost: 22, condition: "N/A", lastPurchased: "Jun 20" },
+  { item: "Dish Soap", cat: "Kitchen", qty: 3, reorder: 2, cost: 6, condition: "N/A", lastPurchased: "May 30" },
+  { item: "Dishwasher Pods", cat: "Kitchen", qty: 1, reorder: 2, cost: 18, condition: "N/A", lastPurchased: "Jun 1" },
+  { item: "Sponges (pack)", cat: "Kitchen", qty: 5, reorder: 3, cost: 4, condition: "N/A", lastPurchased: "Jun 10" },
+  { item: "All-Purpose Cleaner", cat: "Cleaning", qty: 4, reorder: 3, cost: 8, condition: "N/A", lastPurchased: "Jun 15" },
+  { item: "Laundry Detergent", cat: "Cleaning", qty: 1, reorder: 2, cost: 24, condition: "N/A", lastPurchased: "Jun 1" },
+  { item: "Trash Bags (roll)", cat: "Cleaning", qty: 2, reorder: 3, cost: 14, condition: "N/A", lastPurchased: "Jun 10" },
+  { item: "Smoke Detectors", cat: "Safety", qty: 4, reorder: 4, cost: 25, condition: "Good", lastPurchased: "Jan 15" },
+  { item: "Fire Extinguisher", cat: "Safety", qty: 2, reorder: 2, cost: 35, condition: "Good", lastPurchased: "Feb 1" },
+  { item: "First Aid Kit", cat: "Safety", qty: 1, reorder: 1, cost: 28, condition: "Good", lastPurchased: "Mar 10" },
+  { item: "Smart Lock Batteries", cat: "Electronics", qty: 2, reorder: 4, cost: 12, condition: "N/A", lastPurchased: "May 1" },
+  { item: "Light Bulbs (LED)", cat: "Electronics", qty: 3, reorder: 4, cost: 8, condition: "N/A", lastPurchased: "Apr 20" },
+];
+
+const USAGE_ROWS = [
+  { date: "Jul 3", item: "Bath Towel Sets", qty: 2, cost: 56, reason: "Guest Stay", booking: "BK-1042", notes: "Full set replaced" },
+  { date: "Jul 3", item: "Shampoo (bulk)", qty: 1, cost: 18, reason: "Guest Stay", booking: "BK-1042", notes: "Dispenser refilled" },
+  { date: "Jul 3", item: "Coffee Pods", qty: 1, cost: 22, reason: "Guest Stay", booking: "BK-1042", notes: "Box restocked" },
+  { date: "Jul 3", item: "Trash Bags", qty: 1, cost: 14, reason: "Cleaning", booking: "BK-1042", notes: "" },
+  { date: "Jul 1", item: "Queen Sheet Sets", qty: 1, cost: 45, reason: "Damage", booking: "BK-1041", notes: "Stain - unrepairable" },
+  { date: "Jun 30", item: "Bath Towel Sets", qty: 2, cost: 56, reason: "Guest Stay", booking: "BK-1041", notes: "" },
+  { date: "Jun 30", item: "All-Purpose Cleaner", qty: 1, cost: 8, reason: "Cleaning", booking: "BK-1041", notes: "" },
+  { date: "Jun 30", item: "Toilet Paper", qty: 1, cost: 32, reason: "Guest Stay", booking: "BK-1041", notes: "Case used" },
+  { date: "Jun 28", item: "Sponges", qty: 1, cost: 4, reason: "Cleaning", booking: "-", notes: "Routine replacement" },
+  { date: "Jun 26", item: "Light Bulbs (LED)", qty: 2, cost: 16, reason: "Maintenance", booking: "-", notes: "Porch + bedroom" },
+  { date: "Jun 25", item: "Hand Soap Refills", qty: 2, cost: 16, reason: "Guest Stay", booking: "BK-1040", notes: "" },
+  { date: "Jun 22", item: "Dishwasher Pods", qty: 1, cost: 18, reason: "Guest Stay", booking: "BK-1039", notes: "Box restocked" },
+];
+
+const RESERVE_ROWS = [
+  { item: "Toilet Paper (case)", qty: 1, condition: "Low Stock", replace: "Now", costPer: 32, total: 64, priority: "urgent" as const, status: "Order Needed" },
+  { item: "Shampoo (bulk)", qty: 2, condition: "Low Stock", replace: "Now", costPer: 18, total: 36, priority: "urgent" as const, status: "Order Needed" },
+  { item: "Body Wash (bulk)", qty: 2, condition: "Low Stock", replace: "Now", costPer: 16, total: 32, priority: "urgent" as const, status: "Order Needed" },
+  { item: "Smart Lock Batteries", qty: 2, condition: "Low", replace: "Jul 15", costPer: 12, total: 24, priority: "high" as const, status: "Monitor" },
+  { item: "Laundry Detergent", qty: 1, condition: "Low Stock", replace: "Jul 10", costPer: 24, total: 48, priority: "high" as const, status: "Order Soon" },
+  { item: "Trash Bags (roll)", qty: 2, condition: "Low", replace: "Jul 20", costPer: 14, total: 42, priority: "high" as const, status: "Monitor" },
+  { item: "Duvet Inserts", qty: 3, condition: "Fair", replace: "Aug 15", costPer: 65, total: 195, priority: "medium" as const, status: "Plan Replacement" },
+  { item: "Pillow Protectors", qty: 10, condition: "Fair", replace: "Sep 1", costPer: 12, total: 144, priority: "medium" as const, status: "Plan Replacement" },
+  { item: "Light Bulbs (LED)", qty: 3, condition: "N/A", replace: "Jul 25", costPer: 8, total: 24, priority: "low" as const, status: "Stock Up" },
+  { item: "Dishwasher Pods", qty: 1, condition: "Low", replace: "Jul 15", costPer: 18, total: 36, priority: "high" as const, status: "Order Soon" },
+];
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+const MONTH_NUM: Record<string, string> = {
+  Jan: "01", Feb: "02", Mar: "03", Apr: "04", May: "05", Jun: "06",
+  Jul: "07", Aug: "08", Sep: "09", Oct: "10", Nov: "11", Dec: "12",
+};
+
+/** Convert "Jul 3" style short dates to an ISO string for sorting. */
+function mdToIso(md: string, year = 2026): string {
+  const [m, d] = md.split(" ");
+  return `${year}-${MONTH_NUM[m] ?? "00"}-${String(d ?? "0").padStart(2, "0")}`;
+}
 
 // ─── Shared Components ──────────────────────────────────────────────────────
 
@@ -621,24 +726,27 @@ function DynamicPricingTab({ listings, selectedListing, onListingsUpdate }: {
     }
   }
 
-  const today = new Date(2026, 6, 4);
-  const days = Array.from({ length: 30 }, (_, i) => {
-    const d = new Date(today);
-    d.setDate(d.getDate() + i);
-    const dayName = d.toLocaleDateString("en-US", { weekday: "short" });
-    const isWeekend = d.getDay() === 0 || d.getDay() === 5 || d.getDay() === 6;
-    const rate = currentBaseRate || 185;
-    const currentRate = isWeekend ? Math.round(rate * 1.2) : rate;
-    const suggested = currentRate + Math.round((Math.random() - 0.3) * 30);
-    const occupied = Math.random() > 0.32;
-    return {
-      date: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-      day: dayName,
-      currentRate,
-      suggestedRate: suggested,
-      occupied,
-    };
-  });
+  const days = useMemo(() => {
+    const today = new Date(2026, 6, 4);
+    return Array.from({ length: 30 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() + i);
+      const dayName = d.toLocaleDateString("en-US", { weekday: "short" });
+      const isWeekend = d.getDay() === 0 || d.getDay() === 5 || d.getDay() === 6;
+      const rate = currentBaseRate || 185;
+      const currentRate = isWeekend ? Math.round(rate * 1.2) : rate;
+      const suggested = currentRate + Math.round((Math.random() - 0.3) * 30);
+      const occupied = Math.random() > 0.32;
+      return {
+        iso: d.toISOString().slice(0, 10),
+        date: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        day: dayName,
+        currentRate,
+        suggestedRate: suggested,
+        occupied,
+      };
+    });
+  }, [currentBaseRate]);
 
   const pricingSettings = [
     { label: "Min Rate", value: "$120" },
@@ -667,47 +775,57 @@ function DynamicPricingTab({ listings, selectedListing, onListingsUpdate }: {
           <SectionLabel>30-Day Rate Calendar</SectionLabel>
           <IntegrationBadge />
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left min-w-[600px]">
-            <thead>
-              <tr className="border-b border-light-gray">
-                <th className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2">Date</th>
-                <th className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2">Day</th>
-                <th className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2">Current Rate</th>
-                <th className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2">Suggested</th>
-                <th className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2">Status</th>
-                <th className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2">Occupancy</th>
-              </tr>
-            </thead>
-            <tbody>
-              {days.map((d, i) => (
-                <tr key={i} className="border-b border-light-gray last:border-0 hover:bg-cream/50">
-                  <td className="py-1.5 text-xs text-charcoal">{d.date}</td>
-                  <td className="py-1.5 text-xs text-warm-gray">{d.day}</td>
-                  <td className="py-1.5 text-xs text-charcoal">${d.currentRate}</td>
-                  <td className={`py-1.5 text-xs font-medium ${d.suggestedRate > d.currentRate ? "text-emerald-600" : d.suggestedRate < d.currentRate ? "text-red-500" : "text-charcoal"}`}>
-                    ${d.suggestedRate}
-                    {d.suggestedRate !== d.currentRate && (
-                      <span className="ml-1 text-[9px]">
-                        ({d.suggestedRate > d.currentRate ? "+" : ""}{d.suggestedRate - d.currentRate})
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-1.5">
-                    {d.occupied ? (
-                      <Badge variant="green">Booked</Badge>
-                    ) : (
-                      <Badge variant="gray">Open</Badge>
-                    )}
-                  </td>
-                  <td className="py-1.5">
-                    <div className={`w-3 h-3 rounded-full ${d.occupied ? "bg-emerald-400" : "bg-gray-200"}`} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          columns={[
+            { key: "date", label: "Date", accessor: (r) => r.iso, render: (r) => <span className="text-xs text-charcoal">{r.date}</span> },
+            { key: "day", label: "Day", sortable: false, render: (r) => <span className="text-xs text-warm-gray">{r.day}</span> },
+            { key: "currentRate", label: "Current Rate", accessor: (r) => r.currentRate, render: (r) => <span className="text-xs text-charcoal">${r.currentRate}</span> },
+            {
+              key: "suggestedRate",
+              label: "Suggested",
+              accessor: (r) => r.suggestedRate,
+              render: (r) => (
+                <span className={`text-xs font-medium ${r.suggestedRate > r.currentRate ? "text-emerald-600" : r.suggestedRate < r.currentRate ? "text-red-500" : "text-charcoal"}`}>
+                  ${r.suggestedRate}
+                  {r.suggestedRate !== r.currentRate && (
+                    <span className="ml-1 text-[9px]">
+                      ({r.suggestedRate > r.currentRate ? "+" : ""}{r.suggestedRate - r.currentRate})
+                    </span>
+                  )}
+                </span>
+              ),
+            },
+            {
+              key: "status",
+              label: "Status",
+              accessor: (r) => (r.occupied ? "Booked" : "Open"),
+              render: (r) => (r.occupied ? <Badge variant="green">Booked</Badge> : <Badge variant="gray">Open</Badge>),
+            },
+            {
+              key: "occupancy",
+              label: "Occupancy",
+              sortable: false,
+              responsiveClass: "hidden md:table-cell",
+              render: (r) => <div className={`w-3 h-3 rounded-full ${r.occupied ? "bg-emerald-400" : "bg-gray-200"}`} />,
+            },
+          ] satisfies DataTableColumn<(typeof days)[number]>[]}
+          rows={days}
+          rowKey={(r) => r.iso}
+          filters={[
+            {
+              key: "status",
+              label: "Status",
+              options: [
+                { value: "booked", label: "Booked" },
+                { value: "open", label: "Open" },
+              ],
+              match: (r, v) => (v === "booked" ? r.occupied : !r.occupied),
+            },
+          ]}
+          searchPlaceholder="Search dates..."
+          defaultSort={{ key: "date", dir: "asc" }}
+          emptyMessage="No dates match your filters."
+        />
       </Card>
 
       <div className="grid lg:grid-cols-2 gap-6">
@@ -989,34 +1107,39 @@ function MarketCompsTab() {
           <SectionLabel>Comparable Properties</SectionLabel>
           <IntegrationBadge />
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left min-w-[500px]">
-            <thead>
-              <tr className="border-b border-light-gray">
-                <th className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2">Property</th>
-                <th className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2">Nightly Rate</th>
-                <th className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2">Occupancy</th>
-                <th className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2">Rating</th>
-              </tr>
-            </thead>
-            <tbody>
-              {COMPETITORS.map((c) => (
-                <tr key={c.name} className="border-b border-light-gray last:border-0 hover:bg-cream/50">
-                  <td className="py-2.5 text-xs text-charcoal flex items-center gap-1.5">
-                    <Building2 size={12} className="text-warm-gray" />
-                    {c.name}
-                  </td>
-                  <td className="py-2.5 text-xs text-charcoal">${c.rate}</td>
-                  <td className="py-2.5 text-xs text-charcoal">{c.occupancy}%</td>
-                  <td className="py-2.5 text-xs text-charcoal flex items-center gap-1">
-                    <Star size={10} className="text-amber-400 fill-amber-400" />
-                    {c.rating}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          columns={[
+            {
+              key: "name",
+              label: "Property",
+              render: (c) => (
+                <span className="inline-flex items-center gap-1.5 text-xs text-charcoal">
+                  <Building2 size={12} className="text-warm-gray" />
+                  {c.name}
+                </span>
+              ),
+            },
+            { key: "rate", label: "Nightly Rate", accessor: (c) => c.rate, render: (c) => <span className="text-xs text-charcoal">${c.rate}</span> },
+            { key: "occupancy", label: "Occupancy", accessor: (c) => c.occupancy, render: (c) => <span className="text-xs text-charcoal">{c.occupancy}%</span> },
+            {
+              key: "rating",
+              label: "Rating",
+              accessor: (c) => c.rating,
+              render: (c) => (
+                <span className="inline-flex items-center gap-1 text-xs text-charcoal">
+                  <Star size={10} className="text-amber-400 fill-amber-400" />
+                  {c.rating}
+                </span>
+              ),
+            },
+          ] satisfies DataTableColumn<(typeof COMPETITORS)[number]>[]}
+          rows={COMPETITORS}
+          rowKey={(c) => c.name}
+          searchPlaceholder="Search properties..."
+          defaultPageSize={10}
+          defaultSort={{ key: "rate", dir: "desc" }}
+          emptyMessage="No comparable properties."
+        />
       </Card>
 
       {/* Nearby Events */}
@@ -1068,67 +1191,76 @@ function PayoutsTab() {
         />
       </div>
 
-      {/* Filters (display only) */}
-      <div className="flex flex-wrap gap-2">
-        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-light-gray text-[10px] tracking-[0.15em] uppercase text-warm-gray font-medium">
-          <Filter size={10} />
-          All Channels
-          <ChevronDown size={10} />
-        </div>
-        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-light-gray text-[10px] tracking-[0.15em] uppercase text-warm-gray font-medium">
-          <Filter size={10} />
-          All Statuses
-          <ChevronDown size={10} />
-        </div>
-        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-light-gray text-[10px] tracking-[0.15em] uppercase text-warm-gray font-medium">
-          <Calendar size={10} />
-          Last 30 Days
-          <ChevronDown size={10} />
-        </div>
-      </div>
-
       {/* Reconciliation Table */}
       <Card>
         <SectionLabel>Payout Reconciliation</SectionLabel>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left min-w-[700px]">
-            <thead>
-              <tr className="border-b border-light-gray">
-                <th className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2">Date</th>
-                <th className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2">Channel</th>
-                <th className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2">Booking Ref</th>
-                <th className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2">Guest</th>
-                <th className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2 text-right">Expected</th>
-                <th className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2 text-right">Actual</th>
-                <th className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2 text-right">Diff</th>
-                <th className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {PAYOUT_ROWS.map((r, i) => {
+        <DataTable
+          columns={[
+            { key: "date", label: "Date", accessor: (r) => r.date, render: (r) => <span className="text-xs text-charcoal">{r.date}</span> },
+            { key: "channel", label: "Channel", render: (r) => <span className="text-xs text-charcoal">{r.channel}</span> },
+            { key: "ref", label: "Booking Ref", responsiveClass: "hidden md:table-cell", render: (r) => <span className="text-[10px] text-warm-gray font-mono">{r.ref}</span> },
+            { key: "guest", label: "Guest", render: (r) => <span className="text-xs text-charcoal">{r.guest}</span> },
+            {
+              key: "expected",
+              label: "Expected",
+              accessor: (r) => r.expected,
+              className: "text-right",
+              headerClassName: "text-right",
+              render: (r) => <span className="text-xs text-charcoal">${r.expected.toFixed(2)}</span>,
+            },
+            {
+              key: "actual",
+              label: "Actual",
+              accessor: (r) => r.actual,
+              className: "text-right",
+              headerClassName: "text-right",
+              render: (r) => <span className="text-xs text-charcoal">{r.actual !== null ? `$${r.actual.toFixed(2)}` : "—"}</span>,
+            },
+            {
+              key: "diff",
+              label: "Diff",
+              accessor: (r) => (r.actual !== null ? r.actual - r.expected : null),
+              className: "text-right",
+              headerClassName: "text-right",
+              render: (r) => {
                 const diff = r.actual !== null ? r.actual - r.expected : null;
                 return (
-                  <tr key={i} className="border-b border-light-gray last:border-0 hover:bg-cream/50">
-                    <td className="py-2 text-xs text-charcoal">{r.date}</td>
-                    <td className="py-2 text-xs text-charcoal">{r.channel}</td>
-                    <td className="py-2 text-[10px] text-warm-gray font-mono">{r.ref}</td>
-                    <td className="py-2 text-xs text-charcoal">{r.guest}</td>
-                    <td className="py-2 text-xs text-charcoal text-right">${r.expected.toFixed(2)}</td>
-                    <td className="py-2 text-xs text-charcoal text-right">{r.actual !== null ? `$${r.actual.toFixed(2)}` : "—"}</td>
-                    <td className={`py-2 text-xs text-right font-medium ${diff === null ? "text-warm-gray" : diff < 0 ? "text-red-500" : diff === 0 ? "text-emerald-600" : "text-charcoal"}`}>
-                      {diff !== null ? (diff === 0 ? "$0.00" : `-$${Math.abs(diff).toFixed(2)}`) : "—"}
-                    </td>
-                    <td className="py-2">
-                      <Badge variant={r.status === "Matched" ? "green" : r.status === "Pending" ? "yellow" : "red"}>
-                        {r.status}
-                      </Badge>
-                    </td>
-                  </tr>
+                  <span className={`text-xs font-medium ${diff === null ? "text-warm-gray" : diff < 0 ? "text-red-500" : diff === 0 ? "text-emerald-600" : "text-charcoal"}`}>
+                    {diff !== null ? (diff === 0 ? "$0.00" : `-$${Math.abs(diff).toFixed(2)}`) : "—"}
+                  </span>
                 );
-              })}
-            </tbody>
-          </table>
-        </div>
+              },
+            },
+            {
+              key: "status",
+              label: "Status",
+              render: (r) => (
+                <Badge variant={r.status === "Matched" ? "green" : r.status === "Pending" ? "yellow" : "red"}>
+                  {r.status}
+                </Badge>
+              ),
+            },
+          ] satisfies DataTableColumn<(typeof PAYOUT_ROWS)[number]>[]}
+          rows={PAYOUT_ROWS}
+          rowKey={(r) => r.ref}
+          filters={[
+            {
+              key: "channel",
+              label: "Channel",
+              options: ["Airbnb", "VRBO", "Booking.com", "Direct", "Manual"].map((c) => ({ value: c, label: c })),
+              match: (r, v) => r.channel === v,
+            },
+            {
+              key: "status",
+              label: "Status",
+              options: ["Matched", "Discrepancy", "Pending"].map((s) => ({ value: s, label: s })),
+              match: (r, v) => r.status === v,
+            },
+          ]}
+          searchPlaceholder="Search payouts..."
+          defaultSort={{ key: "date", dir: "desc" }}
+          emptyMessage="No payouts match your filters."
+        />
       </Card>
 
       {/* Fee Breakdown */}
@@ -1254,58 +1386,46 @@ function ExpensesPLTab() {
             <SectionLabel>All Expenses</SectionLabel>
             <button onClick={() => alert("Feature coming soon — connect expense tracking to enable.")} className="bg-charcoal text-white px-4 py-2 text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-charcoal/90 transition">Add Expense</button>
           </div>
-          {/* Filter row */}
-          <div className="flex flex-wrap gap-2">
-            {["Property", "Category", "Date Range", "Status"].map((f) => (
-              <div key={f} className="flex items-center gap-1 px-3 py-1.5 bg-cream border border-light-gray text-[10px] text-warm-gray">
-                <Filter size={10} />
-                <span>{f}</span>
-                <ChevronDown size={10} />
-              </div>
-            ))}
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b border-light-gray">
-                  {["Date", "Category", "Subcategory", "Vendor", "Amount", "Payment", "Status", "Frequency", "Booking"].map((h) => (
-                    <th key={h} className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2 px-2 whitespace-nowrap">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  { date: "Jul 3", cat: "Cleaning", sub: "Deep Clean", vendor: "Maria's Cleaning Co", amount: 150, payment: "Zelle", status: "Paid", freq: "Per Stay", booking: "BK-1042" },
-                  { date: "Jul 3", cat: "Laundry", sub: "Linens", vendor: "Fresh Fold Laundry", amount: 45, payment: "Card", status: "Paid", freq: "Per Stay", booking: "BK-1042" },
-                  { date: "Jul 2", cat: "Supplies", sub: "Toiletries", vendor: "Amazon", amount: 62, payment: "Card", status: "Paid", freq: "Monthly", booking: "-" },
-                  { date: "Jul 1", cat: "Utilities", sub: "Electricity", vendor: "Oncor/TXU", amount: 180, payment: "Auto-Pay", status: "Paid", freq: "Monthly", booking: "-" },
-                  { date: "Jul 1", cat: "Utilities", sub: "Water", vendor: "City of Arlington", amount: 85, payment: "Auto-Pay", status: "Paid", freq: "Monthly", booking: "-" },
-                  { date: "Jul 1", cat: "Utilities", sub: "Gas", vendor: "Atmos Energy", amount: 45, payment: "Auto-Pay", status: "Paid", freq: "Monthly", booking: "-" },
-                  { date: "Jul 1", cat: "Utilities", sub: "Internet", vendor: "AT&T Fiber", amount: 80, payment: "Auto-Pay", status: "Paid", freq: "Monthly", booking: "-" },
-                  { date: "Jul 1", cat: "Insurance", sub: "STR Policy", vendor: "Proper Insurance", amount: 200, payment: "Auto-Pay", status: "Paid", freq: "Monthly", booking: "-" },
-                  { date: "Jul 1", cat: "Mortgage", sub: "Principal + Interest", vendor: "Wells Fargo", amount: 1500, payment: "Auto-Pay", status: "Paid", freq: "Monthly", booking: "-" },
-                  { date: "Jun 30", cat: "Cleaning", sub: "Turnover Clean", vendor: "Maria's Cleaning Co", amount: 95, payment: "Zelle", status: "Paid", freq: "Per Stay", booking: "BK-1041" },
-                  { date: "Jun 28", cat: "Repairs", sub: "Plumbing", vendor: "DFW Plumbing Pros", amount: 275, payment: "Check", status: "Paid", freq: "One-time", booking: "-" },
-                  { date: "Jun 25", cat: "Supplies", sub: "Kitchen", vendor: "Costco", amount: 48, payment: "Card", status: "Paid", freq: "As Needed", booking: "-" },
-                  { date: "Jun 22", cat: "Lawn Care", sub: "Mowing", vendor: "Green Lawns DFW", amount: 100, payment: "Venmo", status: "Paid", freq: "Bi-weekly", booking: "-" },
-                  { date: "Jun 20", cat: "Software", sub: "PMS", vendor: "Hospitable", amount: 25, payment: "Card", status: "Paid", freq: "Monthly", booking: "-" },
-                  { date: "Jun 18", cat: "Supplies", sub: "Cleaning", vendor: "Home Depot", amount: 34, payment: "Card", status: "Paid", freq: "As Needed", booking: "-" },
-                ].map((row, i) => (
-                  <tr key={i} className="border-b border-light-gray hover:bg-cream/50">
-                    <td className="text-[10px] text-charcoal py-2 px-2 whitespace-nowrap">{row.date}</td>
-                    <td className="text-[10px] text-charcoal py-2 px-2">{row.cat}</td>
-                    <td className="text-[10px] text-warm-gray py-2 px-2">{row.sub}</td>
-                    <td className="text-[10px] text-charcoal py-2 px-2">{row.vendor}</td>
-                    <td className="text-[10px] text-red-500 py-2 px-2 font-medium">${row.amount}</td>
-                    <td className="text-[10px] text-warm-gray py-2 px-2">{row.payment}</td>
-                    <td className="py-2 px-2"><Badge variant={row.status === "Paid" ? "green" : row.status === "Due" ? "yellow" : "red"}>{row.status}</Badge></td>
-                    <td className="text-[10px] text-warm-gray py-2 px-2">{row.freq}</td>
-                    <td className="text-[10px] text-charcoal py-2 px-2">{row.booking}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={[
+              { key: "date", label: "Date", accessor: (r) => mdToIso(r.date), render: (r) => <span className="text-[10px] text-charcoal whitespace-nowrap">{r.date}</span> },
+              { key: "cat", label: "Category", render: (r) => <span className="text-[10px] text-charcoal">{r.cat}</span> },
+              { key: "sub", label: "Subcategory", responsiveClass: "hidden md:table-cell", render: (r) => <span className="text-[10px] text-warm-gray">{r.sub}</span> },
+              { key: "vendor", label: "Vendor", render: (r) => <span className="text-[10px] text-charcoal">{r.vendor}</span> },
+              { key: "amount", label: "Amount", accessor: (r) => r.amount, render: (r) => <span className="text-[10px] text-red-500 font-medium">${r.amount}</span> },
+              { key: "payment", label: "Payment", responsiveClass: "hidden md:table-cell", render: (r) => <span className="text-[10px] text-warm-gray">{r.payment}</span> },
+              {
+                key: "status",
+                label: "Status",
+                render: (r) => <Badge variant={r.status === "Paid" ? "green" : r.status === "Due" ? "yellow" : "red"}>{r.status}</Badge>,
+              },
+              { key: "freq", label: "Frequency", responsiveClass: "hidden lg:table-cell", render: (r) => <span className="text-[10px] text-warm-gray">{r.freq}</span> },
+              { key: "booking", label: "Booking", responsiveClass: "hidden lg:table-cell", render: (r) => <span className="text-[10px] text-charcoal">{r.booking}</span> },
+            ] satisfies DataTableColumn<(typeof EXPENSE_ROWS)[number]>[]}
+            rows={EXPENSE_ROWS}
+            rowKey={(r, i) => `${r.date}-${r.vendor}-${i}`}
+            filters={[
+              {
+                key: "cat",
+                label: "Category",
+                options: Array.from(new Set(EXPENSE_ROWS.map((r) => r.cat))).map((c) => ({ value: c, label: c })),
+                match: (r, v) => r.cat === v,
+              },
+              {
+                key: "status",
+                label: "Status",
+                options: [
+                  { value: "Paid", label: "Paid" },
+                  { value: "Due", label: "Due" },
+                  { value: "Overdue", label: "Overdue" },
+                ],
+                match: (r, v) => r.status === v,
+              },
+            ]}
+            searchPlaceholder="Search expenses..."
+            defaultSort={{ key: "date", dir: "desc" }}
+            emptyMessage="No expenses match your filters."
+          />
         </div>
       )}
 
@@ -1386,44 +1506,43 @@ function ExpensesPLTab() {
             <SectionLabel>Recurring Bills</SectionLabel>
             <button onClick={() => alert("Feature coming soon — connect expense tracking to enable.")} className="bg-charcoal text-white px-4 py-2 text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-charcoal/90 transition">Add Bill</button>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b border-light-gray">
-                  {["Name", "Provider", "Amount", "Frequency", "Due Date", "Status", "Auto-Pay"].map((h) => (
-                    <th key={h} className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2 px-2 whitespace-nowrap">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  { name: "Mortgage", provider: "Wells Fargo", amount: 1500, freq: "Monthly", due: "1st", status: "Paid", auto: true },
-                  { name: "Water", provider: "City of Arlington", amount: 85, freq: "Monthly", due: "15th", status: "Paid", auto: true },
-                  { name: "Electricity", provider: "Oncor/TXU", amount: 180, freq: "Monthly", due: "10th", status: "Paid", auto: true },
-                  { name: "Gas", provider: "Atmos Energy", amount: 45, freq: "Monthly", due: "12th", status: "Paid", auto: true },
-                  { name: "Internet", provider: "AT&T Fiber", amount: 80, freq: "Monthly", due: "5th", status: "Paid", auto: true },
-                  { name: "Insurance", provider: "Proper Insurance", amount: 200, freq: "Monthly", due: "1st", status: "Paid", auto: true },
-                  { name: "Property Tax", provider: "Tarrant County", amount: 400, freq: "Monthly", due: "1st", status: "Paid", auto: false },
-                  { name: "Trash", provider: "Republic Services", amount: 35, freq: "Monthly", due: "20th", status: "Due", auto: false },
-                  { name: "Lawn Care", provider: "Green Lawns DFW", amount: 100, freq: "Bi-weekly", due: "Every other Fri", status: "Paid", auto: false },
-                  { name: "Pest Control", provider: "ABC Home & Commercial", amount: 50, freq: "Quarterly", due: "Jul 15", status: "Due", auto: false },
-                  { name: "Security", provider: "Ring/SimpliSafe", amount: 25, freq: "Monthly", due: "8th", status: "Paid", auto: true },
-                  { name: "Software", provider: "Hospitable + PriceLabs", amount: 75, freq: "Monthly", due: "1st", status: "Paid", auto: true },
-                  { name: "HOA", provider: "Arlington HOA", amount: 150, freq: "Monthly", due: "1st", status: "Overdue", auto: false },
-                ].map((bill, i) => (
-                  <tr key={i} className="border-b border-light-gray hover:bg-cream/50">
-                    <td className="text-[10px] text-charcoal py-2 px-2 font-medium">{bill.name}</td>
-                    <td className="text-[10px] text-warm-gray py-2 px-2">{bill.provider}</td>
-                    <td className="text-[10px] text-charcoal py-2 px-2">${bill.amount}</td>
-                    <td className="text-[10px] text-warm-gray py-2 px-2">{bill.freq}</td>
-                    <td className="text-[10px] text-warm-gray py-2 px-2">{bill.due}</td>
-                    <td className="py-2 px-2"><Badge variant={bill.status === "Paid" ? "green" : bill.status === "Due" ? "yellow" : "red"}>{bill.status}</Badge></td>
-                    <td className="text-[10px] py-2 px-2">{bill.auto ? <CheckCircle size={12} className="text-emerald-500" /> : <XCircle size={12} className="text-warm-gray" />}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={[
+              { key: "name", label: "Name", render: (r) => <span className="text-[10px] text-charcoal font-medium">{r.name}</span> },
+              { key: "provider", label: "Provider", responsiveClass: "hidden md:table-cell", render: (r) => <span className="text-[10px] text-warm-gray">{r.provider}</span> },
+              { key: "amount", label: "Amount", accessor: (r) => r.amount, render: (r) => <span className="text-[10px] text-charcoal">${r.amount}</span> },
+              { key: "freq", label: "Frequency", responsiveClass: "hidden md:table-cell", render: (r) => <span className="text-[10px] text-warm-gray">{r.freq}</span> },
+              { key: "due", label: "Due Date", render: (r) => <span className="text-[10px] text-warm-gray">{r.due}</span> },
+              {
+                key: "status",
+                label: "Status",
+                render: (r) => <Badge variant={r.status === "Paid" ? "green" : r.status === "Due" ? "yellow" : "red"}>{r.status}</Badge>,
+              },
+              {
+                key: "auto",
+                label: "Auto-Pay",
+                accessor: (r) => (r.auto ? "Yes" : "No"),
+                render: (r) => (r.auto ? <CheckCircle size={12} className="text-emerald-500" /> : <XCircle size={12} className="text-warm-gray" />),
+              },
+            ] satisfies DataTableColumn<(typeof BILL_ROWS)[number]>[]}
+            rows={BILL_ROWS}
+            rowKey={(r) => r.name}
+            filters={[
+              {
+                key: "status",
+                label: "Status",
+                options: [
+                  { value: "Paid", label: "Paid" },
+                  { value: "Due", label: "Due" },
+                  { value: "Overdue", label: "Overdue" },
+                ],
+                match: (r, v) => r.status === v,
+              },
+            ]}
+            searchPlaceholder="Search bills..."
+            defaultSort={{ key: "amount", dir: "desc" }}
+            emptyMessage="No bills match your filters."
+          />
         </div>
       )}
 
@@ -1437,55 +1556,50 @@ function ExpensesPLTab() {
               <button onClick={() => alert("Feature coming soon — connect expense tracking to enable.")} className="bg-charcoal text-white px-4 py-2 text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-charcoal/90 transition">Record Purchase</button>
             </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b border-light-gray">
-                  {["Item", "Category", "Qty", "Reorder Lvl", "Unit Cost", "Total Value", "Condition", "Last Purchased"].map((h) => (
-                    <th key={h} className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2 px-2 whitespace-nowrap">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  { item: "Queen Sheet Sets", cat: "Linens", qty: 6, reorder: 4, cost: 45, condition: "Good", lastPurchased: "Jun 10" },
-                  { item: "Bath Towel Sets", cat: "Linens", qty: 8, reorder: 6, cost: 28, condition: "Good", lastPurchased: "May 22" },
-                  { item: "Pillow Protectors", cat: "Linens", qty: 10, reorder: 8, cost: 12, condition: "Fair", lastPurchased: "Apr 15" },
-                  { item: "Duvet Inserts", cat: "Linens", qty: 3, reorder: 3, cost: 65, condition: "Fair", lastPurchased: "Mar 1" },
-                  { item: "Shampoo (bulk)", cat: "Toiletries", qty: 2, reorder: 3, cost: 18, condition: "N/A", lastPurchased: "Jun 28" },
-                  { item: "Body Wash (bulk)", cat: "Toiletries", qty: 2, reorder: 3, cost: 16, condition: "N/A", lastPurchased: "Jun 28" },
-                  { item: "Hand Soap Refills", cat: "Toiletries", qty: 4, reorder: 4, cost: 8, condition: "N/A", lastPurchased: "Jun 15" },
-                  { item: "Toilet Paper (case)", cat: "Toiletries", qty: 1, reorder: 2, cost: 32, condition: "N/A", lastPurchased: "Jun 5" },
-                  { item: "Coffee Pods (box)", cat: "Kitchen", qty: 3, reorder: 2, cost: 22, condition: "N/A", lastPurchased: "Jun 20" },
-                  { item: "Dish Soap", cat: "Kitchen", qty: 3, reorder: 2, cost: 6, condition: "N/A", lastPurchased: "May 30" },
-                  { item: "Dishwasher Pods", cat: "Kitchen", qty: 1, reorder: 2, cost: 18, condition: "N/A", lastPurchased: "Jun 1" },
-                  { item: "Sponges (pack)", cat: "Kitchen", qty: 5, reorder: 3, cost: 4, condition: "N/A", lastPurchased: "Jun 10" },
-                  { item: "All-Purpose Cleaner", cat: "Cleaning", qty: 4, reorder: 3, cost: 8, condition: "N/A", lastPurchased: "Jun 15" },
-                  { item: "Laundry Detergent", cat: "Cleaning", qty: 1, reorder: 2, cost: 24, condition: "N/A", lastPurchased: "Jun 1" },
-                  { item: "Trash Bags (roll)", cat: "Cleaning", qty: 2, reorder: 3, cost: 14, condition: "N/A", lastPurchased: "Jun 10" },
-                  { item: "Smoke Detectors", cat: "Safety", qty: 4, reorder: 4, cost: 25, condition: "Good", lastPurchased: "Jan 15" },
-                  { item: "Fire Extinguisher", cat: "Safety", qty: 2, reorder: 2, cost: 35, condition: "Good", lastPurchased: "Feb 1" },
-                  { item: "First Aid Kit", cat: "Safety", qty: 1, reorder: 1, cost: 28, condition: "Good", lastPurchased: "Mar 10" },
-                  { item: "Smart Lock Batteries", cat: "Electronics", qty: 2, reorder: 4, cost: 12, condition: "N/A", lastPurchased: "May 1" },
-                  { item: "Light Bulbs (LED)", cat: "Electronics", qty: 3, reorder: 4, cost: 8, condition: "N/A", lastPurchased: "Apr 20" },
-                ].map((row, i) => {
-                  const atOrBelowReorder = row.qty <= row.reorder;
-                  return (
-                    <tr key={i} className={`border-b border-light-gray ${atOrBelowReorder ? "bg-amber-50" : "hover:bg-cream/50"}`}>
-                      <td className="text-[10px] text-charcoal py-2 px-2 font-medium">{row.item}</td>
-                      <td className="text-[10px] text-warm-gray py-2 px-2">{row.cat}</td>
-                      <td className={`text-[10px] py-2 px-2 font-medium ${atOrBelowReorder ? "text-amber-700" : "text-charcoal"}`}>{row.qty}</td>
-                      <td className="text-[10px] text-warm-gray py-2 px-2">{row.reorder}</td>
-                      <td className="text-[10px] text-charcoal py-2 px-2">${row.cost}</td>
-                      <td className="text-[10px] text-charcoal py-2 px-2">${row.qty * row.cost}</td>
-                      <td className="text-[10px] text-warm-gray py-2 px-2">{row.condition}</td>
-                      <td className="text-[10px] text-warm-gray py-2 px-2">{row.lastPurchased}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={[
+              { key: "item", label: "Item", render: (r) => <span className="text-[10px] text-charcoal font-medium">{r.item}</span> },
+              { key: "cat", label: "Category", render: (r) => <span className="text-[10px] text-warm-gray">{r.cat}</span> },
+              {
+                key: "qty",
+                label: "Qty",
+                accessor: (r) => r.qty,
+                render: (r) => (
+                  <span className={`inline-flex items-center gap-1.5 text-[10px] font-medium ${r.qty <= r.reorder ? "text-amber-700" : "text-charcoal"}`}>
+                    {r.qty}
+                    {r.qty <= r.reorder && <Badge variant="yellow">Low</Badge>}
+                  </span>
+                ),
+              },
+              { key: "reorder", label: "Reorder Lvl", accessor: (r) => r.reorder, responsiveClass: "hidden md:table-cell", render: (r) => <span className="text-[10px] text-warm-gray">{r.reorder}</span> },
+              { key: "cost", label: "Unit Cost", accessor: (r) => r.cost, render: (r) => <span className="text-[10px] text-charcoal">${r.cost}</span> },
+              { key: "totalValue", label: "Total Value", accessor: (r) => r.qty * r.cost, render: (r) => <span className="text-[10px] text-charcoal">${r.qty * r.cost}</span> },
+              { key: "condition", label: "Condition", responsiveClass: "hidden md:table-cell", render: (r) => <span className="text-[10px] text-warm-gray">{r.condition}</span> },
+              { key: "lastPurchased", label: "Last Purchased", accessor: (r) => mdToIso(r.lastPurchased), responsiveClass: "hidden lg:table-cell", render: (r) => <span className="text-[10px] text-warm-gray">{r.lastPurchased}</span> },
+            ] satisfies DataTableColumn<(typeof INVENTORY_ROWS)[number]>[]}
+            rows={INVENTORY_ROWS}
+            rowKey={(r) => r.item}
+            filters={[
+              {
+                key: "cat",
+                label: "Category",
+                options: Array.from(new Set(INVENTORY_ROWS.map((r) => r.cat))).map((c) => ({ value: c, label: c })),
+                match: (r, v) => r.cat === v,
+              },
+              {
+                key: "stock",
+                label: "Stock",
+                options: [
+                  { value: "low", label: "Low Stock" },
+                  { value: "ok", label: "In Stock" },
+                ],
+                match: (r, v) => (v === "low" ? r.qty <= r.reorder : r.qty > r.reorder),
+              },
+            ]}
+            searchPlaceholder="Search inventory..."
+            defaultSort={{ key: "item", dir: "asc" }}
+            emptyMessage="No inventory items match your filters."
+          />
         </div>
       )}
 
@@ -1501,43 +1615,34 @@ function ExpensesPLTab() {
             <KPICard icon={Star} label="Top Used Item" value="Bath Towels" accent="text-charcoal" sub="14 units this month" />
             <KPICard icon={BarChart3} label="Avg Usage Per Booking" value="$24.30" accent="text-charcoal" sub="Across 14 bookings" />
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b border-light-gray">
-                  {["Date", "Item", "Qty Used", "Cost", "Reason", "Booking", "Notes"].map((h) => (
-                    <th key={h} className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2 px-2 whitespace-nowrap">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  { date: "Jul 3", item: "Bath Towel Sets", qty: 2, cost: 56, reason: "Guest Stay", booking: "BK-1042", notes: "Full set replaced" },
-                  { date: "Jul 3", item: "Shampoo (bulk)", qty: 1, cost: 18, reason: "Guest Stay", booking: "BK-1042", notes: "Dispenser refilled" },
-                  { date: "Jul 3", item: "Coffee Pods", qty: 1, cost: 22, reason: "Guest Stay", booking: "BK-1042", notes: "Box restocked" },
-                  { date: "Jul 3", item: "Trash Bags", qty: 1, cost: 14, reason: "Cleaning", booking: "BK-1042", notes: "" },
-                  { date: "Jul 1", item: "Queen Sheet Sets", qty: 1, cost: 45, reason: "Damage", booking: "BK-1041", notes: "Stain - unrepairable" },
-                  { date: "Jun 30", item: "Bath Towel Sets", qty: 2, cost: 56, reason: "Guest Stay", booking: "BK-1041", notes: "" },
-                  { date: "Jun 30", item: "All-Purpose Cleaner", qty: 1, cost: 8, reason: "Cleaning", booking: "BK-1041", notes: "" },
-                  { date: "Jun 30", item: "Toilet Paper", qty: 1, cost: 32, reason: "Guest Stay", booking: "BK-1041", notes: "Case used" },
-                  { date: "Jun 28", item: "Sponges", qty: 1, cost: 4, reason: "Cleaning", booking: "-", notes: "Routine replacement" },
-                  { date: "Jun 26", item: "Light Bulbs (LED)", qty: 2, cost: 16, reason: "Maintenance", booking: "-", notes: "Porch + bedroom" },
-                  { date: "Jun 25", item: "Hand Soap Refills", qty: 2, cost: 16, reason: "Guest Stay", booking: "BK-1040", notes: "" },
-                  { date: "Jun 22", item: "Dishwasher Pods", qty: 1, cost: 18, reason: "Guest Stay", booking: "BK-1039", notes: "Box restocked" },
-                ].map((row, i) => (
-                  <tr key={i} className="border-b border-light-gray hover:bg-cream/50">
-                    <td className="text-[10px] text-charcoal py-2 px-2">{row.date}</td>
-                    <td className="text-[10px] text-charcoal py-2 px-2 font-medium">{row.item}</td>
-                    <td className="text-[10px] text-charcoal py-2 px-2">{row.qty}</td>
-                    <td className="text-[10px] text-red-500 py-2 px-2">${row.cost}</td>
-                    <td className="py-2 px-2"><Badge variant={row.reason === "Damage" ? "red" : row.reason === "Maintenance" ? "yellow" : "gray"}>{row.reason}</Badge></td>
-                    <td className="text-[10px] text-charcoal py-2 px-2">{row.booking}</td>
-                    <td className="text-[10px] text-warm-gray py-2 px-2">{row.notes}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={[
+              { key: "date", label: "Date", accessor: (r) => mdToIso(r.date), render: (r) => <span className="text-[10px] text-charcoal">{r.date}</span> },
+              { key: "item", label: "Item", render: (r) => <span className="text-[10px] text-charcoal font-medium">{r.item}</span> },
+              { key: "qty", label: "Qty Used", accessor: (r) => r.qty, render: (r) => <span className="text-[10px] text-charcoal">{r.qty}</span> },
+              { key: "cost", label: "Cost", accessor: (r) => r.cost, render: (r) => <span className="text-[10px] text-red-500">${r.cost}</span> },
+              {
+                key: "reason",
+                label: "Reason",
+                render: (r) => <Badge variant={r.reason === "Damage" ? "red" : r.reason === "Maintenance" ? "yellow" : "gray"}>{r.reason}</Badge>,
+              },
+              { key: "booking", label: "Booking", responsiveClass: "hidden md:table-cell", render: (r) => <span className="text-[10px] text-charcoal">{r.booking}</span> },
+              { key: "notes", label: "Notes", sortable: false, responsiveClass: "hidden lg:table-cell", render: (r) => <span className="text-[10px] text-warm-gray">{r.notes}</span> },
+            ] satisfies DataTableColumn<(typeof USAGE_ROWS)[number]>[]}
+            rows={USAGE_ROWS}
+            rowKey={(r, i) => `${r.date}-${r.item}-${i}`}
+            filters={[
+              {
+                key: "reason",
+                label: "Reason",
+                options: Array.from(new Set(USAGE_ROWS.map((r) => r.reason))).map((v) => ({ value: v, label: v })),
+                match: (r, v) => r.reason === v,
+              },
+            ]}
+            searchPlaceholder="Search usage log..."
+            defaultSort={{ key: "date", dir: "desc" }}
+            emptyMessage="No usage records match your filters."
+          />
         </div>
       )}
 
@@ -1551,45 +1656,39 @@ function ExpensesPLTab() {
             <KPICard icon={Target} label="Below Reorder" value="5" accent="text-amber-600" />
             <KPICard icon={Calendar} label="Projected 30/60/90 Day" value="$680 / $920 / $1,450" accent="text-charcoal" />
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b border-light-gray">
-                  {["Item", "Current Qty", "Condition", "Expected Replace", "Cost/Item", "Total Cost", "Priority", "Status"].map((h) => (
-                    <th key={h} className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2 px-2 whitespace-nowrap">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  { item: "Toilet Paper (case)", qty: 1, condition: "Low Stock", replace: "Now", costPer: 32, total: 64, priority: "urgent" as const, status: "Order Needed" },
-                  { item: "Shampoo (bulk)", qty: 2, condition: "Low Stock", replace: "Now", costPer: 18, total: 36, priority: "urgent" as const, status: "Order Needed" },
-                  { item: "Body Wash (bulk)", qty: 2, condition: "Low Stock", replace: "Now", costPer: 16, total: 32, priority: "urgent" as const, status: "Order Needed" },
-                  { item: "Smart Lock Batteries", qty: 2, condition: "Low", replace: "Jul 15", costPer: 12, total: 24, priority: "high" as const, status: "Monitor" },
-                  { item: "Laundry Detergent", qty: 1, condition: "Low Stock", replace: "Jul 10", costPer: 24, total: 48, priority: "high" as const, status: "Order Soon" },
-                  { item: "Trash Bags (roll)", qty: 2, condition: "Low", replace: "Jul 20", costPer: 14, total: 42, priority: "high" as const, status: "Monitor" },
-                  { item: "Duvet Inserts", qty: 3, condition: "Fair", replace: "Aug 15", costPer: 65, total: 195, priority: "medium" as const, status: "Plan Replacement" },
-                  { item: "Pillow Protectors", qty: 10, condition: "Fair", replace: "Sep 1", costPer: 12, total: 144, priority: "medium" as const, status: "Plan Replacement" },
-                  { item: "Light Bulbs (LED)", qty: 3, condition: "N/A", replace: "Jul 25", costPer: 8, total: 24, priority: "low" as const, status: "Stock Up" },
-                  { item: "Dishwasher Pods", qty: 1, condition: "Low", replace: "Jul 15", costPer: 18, total: 36, priority: "high" as const, status: "Order Soon" },
-                ].map((row, i) => {
+          <DataTable
+            columns={[
+              { key: "item", label: "Item", render: (r) => <span className="text-[10px] text-charcoal font-medium">{r.item}</span> },
+              { key: "qty", label: "Current Qty", accessor: (r) => r.qty, render: (r) => <span className="text-[10px] text-charcoal">{r.qty}</span> },
+              { key: "condition", label: "Condition", responsiveClass: "hidden md:table-cell", render: (r) => <span className="text-[10px] text-warm-gray">{r.condition}</span> },
+              { key: "replace", label: "Expected Replace", render: (r) => <span className="text-[10px] text-charcoal">{r.replace}</span> },
+              { key: "costPer", label: "Cost/Item", accessor: (r) => r.costPer, responsiveClass: "hidden md:table-cell", render: (r) => <span className="text-[10px] text-charcoal">${r.costPer}</span> },
+              { key: "total", label: "Total Cost", accessor: (r) => r.total, render: (r) => <span className="text-[10px] text-charcoal">${r.total}</span> },
+              {
+                key: "priority",
+                label: "Priority",
+                accessor: (r) => ({ urgent: 0, high: 1, medium: 2, low: 3 })[r.priority],
+                render: (r) => {
                   const priorityVariant = { urgent: "red" as const, high: "orange" as const, medium: "yellow" as const, low: "green" as const };
-                  return (
-                    <tr key={i} className="border-b border-light-gray hover:bg-cream/50">
-                      <td className="text-[10px] text-charcoal py-2 px-2 font-medium">{row.item}</td>
-                      <td className="text-[10px] text-charcoal py-2 px-2">{row.qty}</td>
-                      <td className="text-[10px] text-warm-gray py-2 px-2">{row.condition}</td>
-                      <td className="text-[10px] text-charcoal py-2 px-2">{row.replace}</td>
-                      <td className="text-[10px] text-charcoal py-2 px-2">${row.costPer}</td>
-                      <td className="text-[10px] text-charcoal py-2 px-2">${row.total}</td>
-                      <td className="py-2 px-2"><Badge variant={priorityVariant[row.priority]}>{row.priority}</Badge></td>
-                      <td className="text-[10px] text-warm-gray py-2 px-2">{row.status}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                  return <Badge variant={priorityVariant[r.priority]}>{r.priority}</Badge>;
+                },
+              },
+              { key: "status", label: "Status", render: (r) => <span className="text-[10px] text-warm-gray">{r.status}</span> },
+            ] satisfies DataTableColumn<(typeof RESERVE_ROWS)[number]>[]}
+            rows={RESERVE_ROWS}
+            rowKey={(r) => r.item}
+            filters={[
+              {
+                key: "priority",
+                label: "Priority",
+                options: ["urgent", "high", "medium", "low"].map((p) => ({ value: p, label: p })),
+                match: (r, v) => r.priority === v,
+              },
+            ]}
+            searchPlaceholder="Search items..."
+            defaultSort={{ key: "priority", dir: "asc" }}
+            emptyMessage="No items match your filters."
+          />
         </div>
       )}
 
@@ -1869,39 +1968,36 @@ function ForecastingTab() {
       {/* Date Status Table */}
       <Card>
         <SectionLabel>Upcoming Date Analysis</SectionLabel>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="border-b border-light-gray">
-                <th className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2">Date</th>
-                <th className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2">Day</th>
-                <th className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2">Status</th>
-                <th className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium py-2">Recommendation</th>
-              </tr>
-            </thead>
-            <tbody>
-              {FORECAST_DATES.map((d) => {
-                const sc = statusColors[d.status];
-                const recommendations: Record<string, string> = {
-                  "High Demand": "Consider increasing rate 15-25%",
-                  "Low Demand": "Enable last-minute discount",
-                  "Needs Price Adjustment": "Rate may be too high — review competitors",
-                  "Needs Promotion": "Create special offer or reduce minimum stay",
-                };
-                return (
-                  <tr key={d.date} className="border-b border-light-gray last:border-0 hover:bg-cream/50">
-                    <td className="py-2 text-xs text-charcoal">{d.date}</td>
-                    <td className="py-2 text-xs text-warm-gray">{d.day}</td>
-                    <td className="py-2">
-                      <Badge variant={sc.variant}>{d.status}</Badge>
-                    </td>
-                    <td className="py-2 text-[10px] text-warm-gray">{recommendations[d.status]}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          columns={[
+            { key: "date", label: "Date", accessor: (r) => mdToIso(r.date), render: (r) => <span className="text-xs text-charcoal">{r.date}</span> },
+            { key: "day", label: "Day", sortable: false, render: (r) => <span className="text-xs text-warm-gray">{r.day}</span> },
+            {
+              key: "status",
+              label: "Status",
+              render: (r) => <Badge variant={statusColors[r.status].variant}>{r.status}</Badge>,
+            },
+            {
+              key: "recommendation",
+              label: "Recommendation",
+              accessor: (r) => STATUS_RECOMMENDATIONS[r.status],
+              render: (r) => <span className="text-[10px] text-warm-gray">{STATUS_RECOMMENDATIONS[r.status]}</span>,
+            },
+          ] satisfies DataTableColumn<(typeof FORECAST_DATES)[number]>[]}
+          rows={FORECAST_DATES}
+          rowKey={(r) => r.date}
+          filters={[
+            {
+              key: "status",
+              label: "Status",
+              options: Array.from(new Set(FORECAST_DATES.map((d) => d.status))).map((s) => ({ value: s, label: s })),
+              match: (r, v) => r.status === v,
+            },
+          ]}
+          searchPlaceholder="Search dates..."
+          defaultSort={{ key: "date", dir: "asc" }}
+          emptyMessage="No dates match your filters."
+        />
       </Card>
     </div>
   );

@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState, useMemo, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
+import { DataTable } from "@/components/admin/DataTable";
 import {
   ChevronLeft,
   ChevronRight,
@@ -973,112 +974,128 @@ function AdminAvailabilityPageInner() {
         <h3 className="text-[10px] tracking-[0.15em] uppercase text-warm-gray font-medium mb-4">
           Upcoming Reservations
         </h3>
-        {upcomingReservations.length === 0 ? (
-          <p className="text-xs text-warm-gray text-center py-6">
-            No upcoming reservations for this property.
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b border-light-gray">
-                  {["Guest", "Check-in", "Check-out", "Status", "Total", ""].map(
-                    (h) => (
-                      <th
-                        key={h}
-                        className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium pb-2 pr-4"
+        <DataTable
+          rows={upcomingReservations}
+          rowKey={(r) => r.id}
+          searchPlaceholder="Search by guest name..."
+          defaultPageSize={10}
+          defaultSort={{ key: "checkIn", dir: "asc" }}
+          emptyMessage="No upcoming reservations for this property."
+          filters={[
+            {
+              key: "status",
+              label: "Status",
+              options: [
+                { value: "pending", label: "Pending" },
+                { value: "confirmed", label: "Confirmed" },
+                { value: "cancelled", label: "Cancelled" },
+                { value: "declined", label: "Declined" },
+              ],
+              match: (r, v) => r.status === v,
+            },
+          ]}
+          columns={[
+            {
+              key: "guestName",
+              label: "Guest",
+              render: (r) => (
+                <p className="text-sm text-charcoal font-medium">{r.guestName}</p>
+              ),
+            },
+            {
+              key: "checkIn",
+              label: "Check-in",
+              accessor: (r) => r.checkIn,
+              render: (r) => (
+                <span className="text-xs text-warm-gray">
+                  {new Date(r.checkIn).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    timeZone: "UTC",
+                  })}
+                </span>
+              ),
+            },
+            {
+              key: "checkOut",
+              label: "Check-out",
+              accessor: (r) => r.checkOut,
+              render: (r) => (
+                <span className="text-xs text-warm-gray">
+                  {new Date(r.checkOut).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    timeZone: "UTC",
+                  })}
+                </span>
+              ),
+            },
+            {
+              key: "status",
+              label: "Status",
+              render: (r) => (
+                <span
+                  className={`inline-block text-[9px] tracking-[0.1em] uppercase font-medium px-2 py-0.5 ${statusColors[r.status] || "bg-gray-50 text-warm-gray"}`}
+                >
+                  {r.status}
+                </span>
+              ),
+            },
+            {
+              key: "totalPrice",
+              label: "Total",
+              accessor: (r) => r.totalPrice,
+              render: (r) => (
+                <span className="text-sm text-charcoal font-medium">
+                  ${r.totalPrice}
+                </span>
+              ),
+            },
+            {
+              key: "actions",
+              label: "",
+              sortable: false,
+              render: (r) => (
+                <div className="flex gap-1.5">
+                  {r.status === "pending" && (
+                    <>
+                      <button
+                        onClick={() => updateReservationStatus(r.id, "confirmed")}
+                        className="text-accent hover:text-accent/80 transition"
+                        title="Confirm"
                       >
-                        {h}
-                      </th>
-                    )
+                        <CheckCircle size={16} />
+                      </button>
+                      <button
+                        onClick={() => updateReservationStatus(r.id, "declined")}
+                        className="text-red-400 hover:text-red-600 transition"
+                        title="Decline"
+                      >
+                        <XCircle size={16} />
+                      </button>
+                    </>
                   )}
-                </tr>
-              </thead>
-              <tbody>
-                {upcomingReservations.map((r) => (
-                  <tr
-                    key={r.id}
-                    className="border-b border-light-gray last:border-0"
+                  {r.status === "confirmed" && (
+                    <button
+                      onClick={() => updateReservationStatus(r.id, "cancelled")}
+                      className="text-warm-gray hover:text-charcoal transition"
+                      title="Cancel"
+                    >
+                      <Clock size={16} />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => deleteReservation(r.id)}
+                    className="text-red-300 hover:text-red-500 transition"
+                    title="Delete"
                   >
-                    <td className="py-3 pr-4">
-                      <p className="text-sm text-charcoal font-medium">
-                        {r.guestName}
-                      </p>
-                    </td>
-                    <td className="py-3 pr-4 text-xs text-warm-gray">
-                      {new Date(r.checkIn).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        timeZone: "UTC",
-                      })}
-                    </td>
-                    <td className="py-3 pr-4 text-xs text-warm-gray">
-                      {new Date(r.checkOut).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        timeZone: "UTC",
-                      })}
-                    </td>
-                    <td className="py-3 pr-4">
-                      <span
-                        className={`inline-block text-[9px] tracking-[0.1em] uppercase font-medium px-2 py-0.5 ${statusColors[r.status] || "bg-gray-50 text-warm-gray"}`}
-                      >
-                        {r.status}
-                      </span>
-                    </td>
-                    <td className="py-3 pr-4 text-sm text-charcoal font-medium">
-                      ${r.totalPrice}
-                    </td>
-                    <td className="py-3">
-                      <div className="flex gap-1.5">
-                        {r.status === "pending" && (
-                          <>
-                            <button
-                              onClick={() =>
-                                updateReservationStatus(r.id, "confirmed")
-                              }
-                              className="text-accent hover:text-accent/80 transition"
-                              title="Confirm"
-                            >
-                              <CheckCircle size={16} />
-                            </button>
-                            <button
-                              onClick={() =>
-                                updateReservationStatus(r.id, "declined")
-                              }
-                              className="text-red-400 hover:text-red-600 transition"
-                              title="Decline"
-                            >
-                              <XCircle size={16} />
-                            </button>
-                          </>
-                        )}
-                        {r.status === "confirmed" && (
-                          <button
-                            onClick={() =>
-                              updateReservationStatus(r.id, "cancelled")
-                            }
-                            className="text-warm-gray hover:text-charcoal transition"
-                            title="Cancel"
-                          >
-                            <Clock size={16} />
-                          </button>
-                        )}
-                        <button
-                          onClick={() => deleteReservation(r.id)}
-                          className="text-red-300 hover:text-red-500 transition"
-                          title="Delete"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ),
+            },
+          ]}
+        />
       </div>
 
       {/* Block Dates Modal */}

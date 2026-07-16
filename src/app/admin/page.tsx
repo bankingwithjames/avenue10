@@ -490,12 +490,12 @@ export default function AdminDashboard() {
       {/* ================================================================= */}
       <Section title="Revenue Snapshot" icon={DollarSign} action={{ label: "View Revenue", href: "/admin/revenue" }}>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          <StatCard label="Gross Revenue (MTD)" value={formatCurrency(grossRevenueMTD)} />
-          <StatCard label="Avg Daily Rate" value={formatCurrency(Math.round(avgDailyRate))} />
-          <StatCard label="RevPAR" value={formatCurrency(Math.round(revPAR))} />
-          <StatCard label="Occupancy Rate" value={`${occupancyRate}%`} />
-          <StatCard label="Total Bookings (MTD)" value={totalBookingsMTD} />
-          <StatCard label="Avg Booking Value" value={formatCurrency(Math.round(avgBookingValue))} />
+          <StatCard label="Gross Revenue (MTD)" value={formatCurrency(grossRevenueMTD)} href="/admin/revenue" />
+          <StatCard label="Avg Daily Rate" value={formatCurrency(Math.round(avgDailyRate))} href="/admin/revenue" />
+          <StatCard label="RevPAR" value={formatCurrency(Math.round(revPAR))} href="/admin/revenue" />
+          <StatCard label="Occupancy Rate" value={`${occupancyRate}%`} href="/admin/availability" />
+          <StatCard label="Total Bookings (MTD)" value={totalBookingsMTD} href="/admin/reservations" />
+          <StatCard label="Avg Booking Value" value={formatCurrency(Math.round(avgBookingValue))} href="/admin/revenue" />
         </div>
       </Section>
 
@@ -717,11 +717,23 @@ function KPICard({
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="bg-white border border-light-gray p-4">
+function StatCard({ label, value, href }: { label: string; value: string | number; href?: string }) {
+  const content = (
+    <>
       <div className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium mb-1">{label}</div>
       <div className="text-lg font-serif font-light text-charcoal">{value}</div>
+    </>
+  );
+  if (href) {
+    return (
+      <Link href={href} className="bg-white border border-light-gray p-4 hover:border-warm-gray transition-colors">
+        {content}
+      </Link>
+    );
+  }
+  return (
+    <div className="bg-white border border-light-gray p-4">
+      {content}
     </div>
   );
 }

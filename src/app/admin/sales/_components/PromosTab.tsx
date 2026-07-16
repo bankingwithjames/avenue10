@@ -152,7 +152,7 @@ export default function PromosTab({ listings }: PromosTabProps) {
 
         {showForm && (
           <div className="mb-6 p-4 bg-cream/50 border border-light-gray space-y-4">
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className={labelClass}>Promo Code</label>
                 <div className="flex gap-1">
@@ -188,7 +188,7 @@ export default function PromosTab({ listings }: PromosTabProps) {
                 prefix={discountType === "fixed" ? "$" : undefined}
               />
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <SelectInput
                 label="Applies to Listing"
                 value={listingId}
@@ -217,7 +217,7 @@ export default function PromosTab({ listings }: PromosTabProps) {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <NumberInput
                 label="Minimum Nights"
                 value={minimumNights}

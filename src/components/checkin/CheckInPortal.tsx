@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { TermsTab } from "./TermsTab";
-import { InventoryTab } from "./InventoryTab";
 import { InstructionsTab } from "./InstructionsTab";
 import { ThingsToDoTab } from "./ThingsToDoTab";
 import { RequestsTab } from "./RequestsTab";
@@ -10,7 +9,6 @@ import { ReviewsTab } from "./ReviewsTab";
 import { CheckoutTab } from "./CheckoutTab";
 import {
   FileCheck,
-  ClipboardList,
   KeyRound,
   MapPin,
   MessageSquare,
@@ -29,7 +27,6 @@ import {
 const TABS = [
   { key: "terms", label: "Terms & Conditions", shortLabel: "Terms", icon: FileCheck, locked: false },
   { key: "instructions", label: "Instructions & Codes", shortLabel: "Instructions", icon: KeyRound, locked: true },
-  { key: "inventory", label: "Inventory", shortLabel: "Inventory", icon: ClipboardList, locked: true },
   { key: "explore", label: "Things to Do", shortLabel: "Explore", icon: MapPin, locked: true },
   { key: "requests", label: "Requests", shortLabel: "Requests", icon: MessageSquare, locked: true },
   { key: "reviews", label: "Reviews", shortLabel: "Reviews", icon: Star, locked: true },
@@ -234,7 +231,6 @@ export function CheckInPortal({ token, reservation }: Props) {
         {activeTab === "instructions" && signed && (
           <InstructionsTab token={token} checkIn={reservation.checkIn} signed={signed} />
         )}
-        {activeTab === "inventory" && signed && <InventoryTab token={token} />}
         {activeTab === "explore" && signed && <ThingsToDoTab token={token} />}
         {activeTab === "requests" && signed && <RequestsTab token={token} />}
         {activeTab === "reviews" && signed && <ReviewsTab token={token} />}

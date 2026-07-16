@@ -41,16 +41,29 @@ function Card({ children }: { children: React.ReactNode }) {
   return <div className="bg-white border border-light-gray p-5">{children}</div>;
 }
 
+interface MessagingStatus {
+  emailConfigured: boolean;
+  emailProvider: string | null;
+  emailFrom: string;
+  smsConfigured: boolean;
+  smsProvider: string | null;
+}
+
 export default function AdminIntegrationsPage() {
   const [integrations, setIntegrations] = useState<IntegrationRecord[]>([]);
   const [connecting, setConnecting] = useState<string | null>(null);
   const [connectUrl, setConnectUrl] = useState("");
   const [saving, setSaving] = useState(false);
+  const [messaging, setMessaging] = useState<MessagingStatus | null>(null);
 
   useEffect(() => {
     fetch("/api/admin/integrations")
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setIntegrations(data); })
+      .catch(() => {});
+    fetch("/api/admin/messaging-status")
+      .then(r => (r.ok ? r.json() : null))
+      .then(setMessaging)
       .catch(() => {});
   }, []);
 
@@ -219,6 +232,56 @@ export default function AdminIntegrationsPage() {
       </div>
 
       <div className="space-y-8">
+        <div>
+          <SectionLabel>Email &amp; SMS Messaging</SectionLabel>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Card>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: "#c9a96e" }} />
+                <span className="text-xs text-charcoal font-medium">Transactional &amp; Marketing Email</span>
+              </div>
+              <p className="text-[10px] text-warm-gray mb-3 leading-relaxed">
+                Powers automations (booking confirmations, portal links, reminders) and campaigns. Supports Resend or SendGrid.
+              </p>
+              {messaging?.emailConfigured ? (
+                <div className="space-y-2">
+                  <Badge variant="green">Connected via {messaging.emailProvider}</Badge>
+                  <p className="text-[10px] text-warm-gray">Sending from {messaging.emailFrom}</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Badge variant="gray">Not Configured</Badge>
+                  <p className="text-[10px] text-warm-gray leading-relaxed">
+                    Add <code className="bg-cream px-1">RESEND_API_KEY</code> (or <code className="bg-cream px-1">SENDGRID_API_KEY</code>) and{" "}
+                    <code className="bg-cream px-1">EMAIL_FROM</code> in Vercel → Settings → Environment Variables, then redeploy.
+                    API keys are stored only as environment variables — never in the database.
+                  </p>
+                </div>
+              )}
+            </Card>
+            <Card>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: "#F22F46" }} />
+                <span className="text-xs text-charcoal font-medium">SMS (Twilio)</span>
+              </div>
+              <p className="text-[10px] text-warm-gray mb-3 leading-relaxed">
+                Text-message delivery for automations and campaigns. Marketing SMS only goes to guests with SMS opt-in.
+              </p>
+              {messaging?.smsConfigured ? (
+                <Badge variant="green">Connected via {messaging.smsProvider}</Badge>
+              ) : (
+                <div className="space-y-2">
+                  <Badge variant="gray">Not Configured</Badge>
+                  <p className="text-[10px] text-warm-gray leading-relaxed">
+                    Add <code className="bg-cream px-1">TWILIO_ACCOUNT_SID</code>, <code className="bg-cream px-1">TWILIO_AUTH_TOKEN</code>, and{" "}
+                    <code className="bg-cream px-1">TWILIO_FROM_NUMBER</code> in Vercel → Settings → Environment Variables, then redeploy.
+                  </p>
+                </div>
+              )}
+            </Card>
+          </div>
+        </div>
+
         <div>
           <SectionLabel>Booking Platforms</SectionLabel>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">

@@ -3,8 +3,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Wrench,
-  Search,
-  ChevronDown,
   ChevronRight,
   ChevronLeft,
   Eye,
@@ -41,6 +39,7 @@ import {
   Edit3,
   ArrowRight,
 } from "lucide-react";
+import { DataTable, DataTableColumn, DataTableFilter } from "@/components/admin/DataTable";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -243,9 +242,9 @@ function Badge({ children, className = "" }: { children: React.ReactNode; classN
   return <span className={`text-[9px] tracking-[0.1em] uppercase font-medium px-2 py-0.5 ${className}`}>{children}</span>;
 }
 
-function StatCard({ label, value, icon: Icon }: { label: string; value: string | number; icon: typeof Wrench }) {
+function StatCard({ label, value, icon: Icon, onClick }: { label: string; value: string | number; icon: typeof Wrench; onClick?: () => void }) {
   return (
-    <div className="bg-white border border-light-gray p-4">
+    <div className={`bg-white border border-light-gray p-4${onClick ? " hover:border-warm-gray cursor-pointer transition-colors" : ""}`} onClick={onClick}>
       <div className="flex items-center justify-between mb-2">
         <span className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">{label}</span>
         <Icon size={14} className="text-warm-gray" />
@@ -273,6 +272,13 @@ function DrawerTabButton({ active, onClick, children }: { active: boolean; onCli
 
 // ─── Main Component ─────────────────────────────────────────────────────
 
+function scrollToContent(id: string) {
+  // defer so the tab/filter state applies and content renders first
+  setTimeout(() => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "auto", block: "start" });
+  }, 60);
+}
+
 export default function MaintenanceLogPage() {
   // ── State ──
   type MainTab = "calendar" | "work_orders" | "log" | "recurring" | "vendors" | "costs" | "guest_issues";
@@ -291,18 +297,18 @@ export default function MaintenanceLogPage() {
   const [loading, setLoading] = useState(true);
   const [logsError, setLogsError] = useState(false);
 
-  // Filters
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [priorityFilter, setPriorityFilter] = useState("all");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-
   // Calendar state
   const [calDate, setCalDate] = useState(new Date());
 
   // Drawers
   const [selectedLog, setSelectedLog] = useState<MaintenanceLogRecord | null>(null);
   const [drawerTab, setDrawerTab] = useState("overview");
+  const [editingLog, setEditingLog] = useState(false);
+  const [editLogForm, setEditLogForm] = useState({
+    issueTitle: "", category: "General Repair", priority: "medium", status: "new",
+    description: "", reportedBy: "", vendorId: "", scheduledDate: "", dueDate: "",
+    estimatedCost: 0, actualCost: 0, laborCost: 0, materialsCost: 0, notes: "",
+  });
   const [showAddLog, setShowAddLog] = useState(false);
   const [showAddRecurring, setShowAddRecurring] = useState(false);
   const [showAddVendor, setShowAddVendor] = useState(false);
@@ -358,28 +364,9 @@ export default function MaintenanceLogPage() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  // ── Filtered Logs ──
-  const filteredLogs = useMemo(() => {
-    let list = logs;
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter(l =>
-        l.issueTitle?.toLowerCase().includes(q) ||
-        l.description.toLowerCase().includes(q) ||
-        l.category?.toLowerCase().includes(q) ||
-        l.vendor?.vendorName?.toLowerCase().includes(q) ||
-        l.reportedBy?.toLowerCase().includes(q)
-      );
-    }
-    if (statusFilter !== "all") list = list.filter(l => l.status === statusFilter);
-    if (priorityFilter !== "all") list = list.filter(l => l.priority === priorityFilter);
-    if (categoryFilter !== "all") list = list.filter(l => l.category === categoryFilter);
-    return list;
-  }, [logs, search, statusFilter, priorityFilter, categoryFilter]);
-
   // ── KPI Stats ──
   const stats = useMemo(() => {
-    const openLogs = logs.filter(l => l.status === "new" || l.status === "in_progress" || l.status === "waiting_on_vendor" || l.status === "waiting_on_parts");
+    const openLogs = logs.filter(l => l.status !== "completed" && l.status !== "cancelled");
     const scheduledWeek = logs.filter(l => l.status === "scheduled" && isThisWeek(l.scheduledDate));
     const completedMonth = logs.filter(l => l.status === "completed" && isCurrentMonth(l.completedDate || l.updatedAt));
     const urgentRepairs = logs.filter(l => l.priority === "urgent" && l.status !== "completed" && l.status !== "cancelled");
@@ -437,10 +424,10 @@ export default function MaintenanceLogPage() {
 
   const logsForDay = useCallback((day: number) => {
     const target = new Date(calYear, calMonth, day);
+    // A log appears once: on its scheduled date if set, otherwise its created date.
     return logs.filter(l => {
-      const sd = l.scheduledDate ? new Date(l.scheduledDate) : null;
-      const md = new Date(l.maintenanceDate);
-      return (sd && isSameDay(sd, target)) || isSameDay(md, target);
+      const anchor = l.scheduledDate ? new Date(l.scheduledDate) : new Date(l.maintenanceDate);
+      return isSameDay(anchor, target);
     });
   }, [logs, calYear, calMonth]);
 
@@ -574,6 +561,84 @@ export default function MaintenanceLogPage() {
   const openLog = (log: MaintenanceLogRecord) => {
     setSelectedLog(log);
     setDrawerTab("overview");
+    setEditingLog(false);
+  };
+
+  const startEditLog = (log: MaintenanceLogRecord) => {
+    setEditLogForm({
+      issueTitle: log.issueTitle || "",
+      category: log.category || log.issueType || "General Repair",
+      priority: log.priority || "medium",
+      status: log.status,
+      description: log.description || "",
+      reportedBy: log.reportedBy || "",
+      vendorId: log.vendorId || "",
+      scheduledDate: log.scheduledDate ? log.scheduledDate.slice(0, 10) : "",
+      dueDate: log.dueDate ? log.dueDate.slice(0, 10) : "",
+      estimatedCost: log.estimatedCost || log.cost || 0,
+      actualCost: log.actualCost || 0,
+      laborCost: log.laborCost || 0,
+      materialsCost: log.materialsCost || 0,
+      notes: log.notes || "",
+    });
+    setEditingLog(true);
+  };
+
+  const saveEditLog = async () => {
+    if (!selectedLog) return;
+    setSaving(true);
+    // Keep linked calendar events in step with the edited schedule/title.
+    if (selectedLog.calendarEvents && selectedLog.calendarEvents.length > 0 && editLogForm.scheduledDate) {
+      try {
+        await fetch("/api/admin/maintenance-calendar", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            maintenanceLogId: selectedLog.id,
+            startDatetime: new Date(editLogForm.scheduledDate).toISOString(),
+            title: editLogForm.issueTitle || selectedLog.issueTitle || "Maintenance",
+            colorStatus: editLogForm.priority,
+          }),
+        });
+      } catch { /* non-fatal */ }
+    } else if ((!selectedLog.calendarEvents || selectedLog.calendarEvents.length === 0) && editLogForm.scheduledDate) {
+      // A date was added where none existed — create the calendar event.
+      try {
+        await fetch("/api/admin/maintenance-calendar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            maintenanceLogId: selectedLog.id,
+            propertyId: selectedLog.propertyId,
+            listingId: selectedLog.listingId || undefined,
+            title: editLogForm.issueTitle || "Maintenance",
+            startDatetime: new Date(editLogForm.scheduledDate).toISOString(),
+            calendarViewStatus: "scheduled",
+            colorStatus: editLogForm.priority,
+          }),
+        });
+      } catch { /* non-fatal */ }
+    }
+    await updateLog(selectedLog.id, {
+      issueTitle: editLogForm.issueTitle,
+      category: editLogForm.category,
+      issueType: editLogForm.category,
+      priority: editLogForm.priority,
+      status: editLogForm.status,
+      description: editLogForm.description,
+      reportedBy: editLogForm.reportedBy,
+      vendorId: editLogForm.vendorId || null,
+      scheduledDate: editLogForm.scheduledDate || null,
+      dueDate: editLogForm.dueDate || null,
+      estimatedCost: Number(editLogForm.estimatedCost) || 0,
+      cost: Number(editLogForm.estimatedCost) || 0,
+      actualCost: Number(editLogForm.actualCost) || 0,
+      laborCost: Number(editLogForm.laborCost) || 0,
+      materialsCost: Number(editLogForm.materialsCost) || 0,
+      notes: editLogForm.notes,
+    });
+    setEditingLog(false);
+    setSaving(false);
   };
 
   // ── Loading ──
@@ -628,18 +693,18 @@ export default function MaintenanceLogPage() {
 
       {/* ─── KPI Cards ───────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        <StatCard label="Open Issues" value={stats.openIssues} icon={AlertTriangle} />
-        <StatCard label="Scheduled This Week" value={stats.scheduledWeek} icon={Calendar} />
-        <StatCard label="Completed This Month" value={stats.completedMonth} icon={CheckCircle} />
-        <StatCard label="Urgent Repairs" value={stats.urgentRepairs} icon={Shield} />
-        <StatCard label="Guest-Reported" value={stats.guestIssues} icon={User} />
-        <StatCard label="Cost MTD" value={formatCurrency(stats.costMTD)} icon={DollarSign} />
-        <StatCard label="Vendor Jobs" value={stats.vendorJobs} icon={Wrench} />
-        <StatCard label="Recurring Due" value={stats.recurringDue} icon={Repeat} />
+        <StatCard label="Open Issues" value={stats.openIssues} icon={AlertTriangle} onClick={() => { setMainTab("work_orders"); scrollToContent("admin-tab-content"); }} />
+        <StatCard label="Scheduled This Week" value={stats.scheduledWeek} icon={Calendar} onClick={() => { setMainTab("calendar"); scrollToContent("admin-tab-content"); }} />
+        <StatCard label="Completed This Month" value={stats.completedMonth} icon={CheckCircle} onClick={() => { setMainTab("log"); scrollToContent("admin-tab-content"); }} />
+        <StatCard label="Urgent Repairs" value={stats.urgentRepairs} icon={Shield} onClick={() => { setMainTab("work_orders"); scrollToContent("admin-tab-content"); }} />
+        <StatCard label="Guest-Reported" value={stats.guestIssues} icon={User} onClick={() => { setMainTab("guest_issues"); scrollToContent("admin-tab-content"); }} />
+        <StatCard label="Cost MTD" value={formatCurrency(stats.costMTD)} icon={DollarSign} onClick={() => { setMainTab("costs"); scrollToContent("admin-tab-content"); }} />
+        <StatCard label="Vendor Jobs" value={stats.vendorJobs} icon={Wrench} onClick={() => { setMainTab("vendors"); scrollToContent("admin-tab-content"); }} />
+        <StatCard label="Recurring Due" value={stats.recurringDue} icon={Repeat} onClick={() => { setMainTab("recurring"); scrollToContent("admin-tab-content"); }} />
       </div>
 
       {/* ─── Main Tabs ───────────────────────────────────────────────── */}
-      <div className="flex items-center border border-light-gray bg-white mb-6 overflow-x-auto">
+      <div id="admin-tab-content" className="flex items-center border border-light-gray bg-white mb-6 overflow-x-auto">
         {([
           ["calendar", "Calendar", CalendarDays],
           ["work_orders", "Work Orders", ClipboardCheck],
@@ -854,66 +919,85 @@ export default function MaintenanceLogPage() {
       {/* WORK ORDERS / LOG TABLE                                        */}
       {/* ═══════════════════════════════════════════════════════════════ */}
       {(mainTab === "work_orders" || mainTab === "log") && (
-        <>
-          {/* Filters */}
-          <div className="flex flex-col sm:flex-row gap-3 mb-4">
-            <div className="relative flex-1">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-gray" />
-              <input type="text" placeholder="Search logs..." value={search} onChange={e => setSearch(e.target.value)} className="w-full bg-transparent border border-light-gray text-charcoal text-xs px-3 py-2.5 pl-9 outline-none focus:border-charcoal/40 transition-colors" />
-            </div>
-            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none bg-white">
-              <option value="all">All Statuses</option>
-              {STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
-            </select>
-            <select value={priorityFilter} onChange={e => setPriorityFilter(e.target.value)} className="border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none bg-white">
-              <option value="all">All Priorities</option>
-              {PRIORITIES.map(p => <option key={p} value={p}>{statusLabel(p)}</option>)}
-            </select>
-            <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} className="border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none bg-white">
-              <option value="all">All Categories</option>
-              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-
-          <div className="bg-white border border-light-gray overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-light-gray">
-                  <th className="text-left px-4 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Issue</th>
-                  <th className="text-left px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium hidden md:table-cell">Category</th>
-                  <th className="text-left px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Priority</th>
-                  <th className="text-left px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Status</th>
-                  <th className="text-left px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium hidden lg:table-cell">Vendor</th>
-                  <th className="text-left px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium hidden lg:table-cell">Scheduled</th>
-                  <th className="text-right px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium hidden md:table-cell">Est. Cost</th>
-                  <th className="text-right px-4 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredLogs.length === 0 ? (
-                  <tr><td colSpan={8} className="text-center py-12 text-warm-gray">No maintenance logs match your filters.</td></tr>
-                ) : filteredLogs.map(log => (
-                  <tr key={log.id} className="border-b border-light-gray/50 hover:bg-cream/30 transition cursor-pointer" onClick={() => openLog(log)}>
-                    <td className="px-4 py-3">
-                      <p className="font-medium text-charcoal">{log.issueTitle || log.description.slice(0, 40)}</p>
-                      <p className="text-[10px] text-warm-gray">{listingName(log.listingId || log.propertyId)}{log.reportedBy ? ` · ${log.reportedBy}` : ""}</p>
-                    </td>
-                    <td className="px-3 py-3 text-warm-gray hidden md:table-cell">{log.category || log.issueType}</td>
-                    <td className="px-3 py-3"><Badge className={PRIORITY_COLORS[log.priority] || "text-gray-500 bg-gray-100"}>{log.priority}</Badge></td>
-                    <td className="px-3 py-3"><Badge className={STATUS_COLORS[log.status] || "text-gray-500 bg-gray-100"}>{statusLabel(log.status)}</Badge></td>
-                    <td className="px-3 py-3 text-warm-gray hidden lg:table-cell">{vendorName(log.vendorId)}</td>
-                    <td className="px-3 py-3 text-warm-gray hidden lg:table-cell">{formatDate(log.scheduledDate)}</td>
-                    <td className="px-3 py-3 text-right text-charcoal hidden md:table-cell">{formatCurrencyDec(log.estimatedCost || log.cost)}</td>
-                    <td className="px-4 py-3 text-right">
-                      <button onClick={e => { e.stopPropagation(); openLog(log); }} className="text-charcoal hover:bg-cream p-1 transition"><Eye size={14} /></button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="text-[10px] text-warm-gray mt-2">{filteredLogs.length} maintenance logs</p>
-        </>
+        <DataTable<MaintenanceLogRecord>
+          columns={[
+            {
+              key: "issue",
+              label: "Issue",
+              accessor: log => `${log.issueTitle || log.description} ${listingName(log.listingId || log.propertyId)} ${log.reportedBy || ""}`,
+              render: log => (
+                <div>
+                  <p className="font-medium text-charcoal text-xs">{log.issueTitle || log.description.slice(0, 40)}</p>
+                  <p className="text-[10px] text-warm-gray">{listingName(log.listingId || log.propertyId)}{log.reportedBy ? ` · ${log.reportedBy}` : ""}</p>
+                </div>
+              ),
+            },
+            {
+              key: "category",
+              label: "Category",
+              accessor: log => log.category || log.issueType,
+              render: log => <span className="text-xs text-warm-gray">{log.category || log.issueType}</span>,
+              responsiveClass: "hidden md:table-cell",
+            },
+            {
+              key: "priority",
+              label: "Priority",
+              accessor: log => log.priority,
+              render: log => <Badge className={PRIORITY_COLORS[log.priority] || "text-gray-500 bg-gray-100"}>{log.priority}</Badge>,
+            },
+            {
+              key: "status",
+              label: "Status",
+              accessor: log => log.status,
+              render: log => <Badge className={STATUS_COLORS[log.status] || "text-gray-500 bg-gray-100"}>{statusLabel(log.status)}</Badge>,
+            },
+            {
+              key: "vendor",
+              label: "Vendor",
+              accessor: log => vendorName(log.vendorId),
+              render: log => <span className="text-xs text-warm-gray">{vendorName(log.vendorId)}</span>,
+              responsiveClass: "hidden lg:table-cell",
+            },
+            {
+              key: "scheduledDate",
+              label: "Scheduled",
+              accessor: log => log.scheduledDate ? new Date(log.scheduledDate).getTime() : null,
+              render: log => <span className="text-xs text-warm-gray">{formatDate(log.scheduledDate)}</span>,
+              responsiveClass: "hidden lg:table-cell",
+            },
+            {
+              key: "estimatedCost",
+              label: "Est. Cost",
+              accessor: log => log.estimatedCost || log.cost,
+              render: log => <span className="text-xs text-charcoal">{formatCurrencyDec(log.estimatedCost || log.cost)}</span>,
+              className: "text-right",
+              headerClassName: "text-right",
+              responsiveClass: "hidden md:table-cell",
+            },
+            {
+              key: "actions",
+              label: "Actions",
+              sortable: false,
+              render: log => (
+                <button onClick={e => { e.stopPropagation(); openLog(log); }} className="text-charcoal hover:bg-cream p-1 transition"><Eye size={14} /></button>
+              ),
+              className: "text-right",
+              headerClassName: "text-right",
+            },
+          ] satisfies DataTableColumn<MaintenanceLogRecord>[]}
+          rows={logs}
+          rowKey={log => log.id}
+          filters={[
+            { key: "status", label: "Status", options: STATUSES.map(s => ({ value: s, label: statusLabel(s) })), match: (log, v) => log.status === v },
+            { key: "priority", label: "Priority", options: PRIORITIES.map(p => ({ value: p, label: statusLabel(p) })), match: (log, v) => log.priority === v },
+            { key: "category", label: "Category", options: CATEGORIES.map(c => ({ value: c, label: c })), match: (log, v) => log.category === v },
+          ] satisfies DataTableFilter<MaintenanceLogRecord>[]}
+          searchPlaceholder="Search maintenance logs..."
+          onRowClick={openLog}
+          defaultPageSize={25}
+          defaultSort={{ key: "scheduledDate", dir: "desc" }}
+          emptyMessage="No maintenance logs match your filters."
+        />
       )}
 
       {/* ═══════════════════════════════════════════════════════════════ */}
@@ -1033,34 +1117,73 @@ export default function MaintenanceLogPage() {
             </div>
           </div>
 
-          <div className="bg-white border border-light-gray overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-light-gray">
-                  <th className="text-left px-4 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Issue</th>
-                  <th className="text-left px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Status</th>
-                  <th className="text-left px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium hidden md:table-cell">Vendor</th>
-                  <th className="text-right px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Estimated</th>
-                  <th className="text-right px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Actual</th>
-                  <th className="text-right px-3 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium hidden lg:table-cell">Labor</th>
-                  <th className="text-right px-4 py-3 text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium hidden lg:table-cell">Materials</th>
-                </tr>
-              </thead>
-              <tbody>
-                {logs.filter(l => (l.estimatedCost || l.actualCost || l.cost) > 0).map(log => (
-                  <tr key={log.id} className="border-b border-light-gray/50 hover:bg-cream/30 transition cursor-pointer" onClick={() => openLog(log)}>
-                    <td className="px-4 py-3 text-charcoal font-medium">{log.issueTitle || log.description.slice(0, 40)}</td>
-                    <td className="px-3 py-3"><Badge className={STATUS_COLORS[log.status]}>{statusLabel(log.status)}</Badge></td>
-                    <td className="px-3 py-3 text-warm-gray hidden md:table-cell">{vendorName(log.vendorId)}</td>
-                    <td className="px-3 py-3 text-right text-charcoal">{formatCurrencyDec(log.estimatedCost || log.cost)}</td>
-                    <td className="px-3 py-3 text-right text-charcoal font-medium">{formatCurrencyDec(log.actualCost)}</td>
-                    <td className="px-3 py-3 text-right text-warm-gray hidden lg:table-cell">{formatCurrencyDec(log.laborCost)}</td>
-                    <td className="px-4 py-3 text-right text-warm-gray hidden lg:table-cell">{formatCurrencyDec(log.materialsCost)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable<MaintenanceLogRecord>
+            columns={[
+              {
+                key: "issue",
+                label: "Issue",
+                accessor: log => log.issueTitle || log.description,
+                render: log => <span className="text-xs text-charcoal font-medium">{log.issueTitle || log.description.slice(0, 40)}</span>,
+              },
+              {
+                key: "status",
+                label: "Status",
+                accessor: log => log.status,
+                render: log => <Badge className={STATUS_COLORS[log.status]}>{statusLabel(log.status)}</Badge>,
+              },
+              {
+                key: "vendor",
+                label: "Vendor",
+                accessor: log => vendorName(log.vendorId),
+                render: log => <span className="text-xs text-warm-gray">{vendorName(log.vendorId)}</span>,
+                responsiveClass: "hidden md:table-cell",
+              },
+              {
+                key: "estimated",
+                label: "Estimated",
+                accessor: log => log.estimatedCost || log.cost,
+                render: log => <span className="text-xs text-charcoal">{formatCurrencyDec(log.estimatedCost || log.cost)}</span>,
+                className: "text-right",
+                headerClassName: "text-right",
+              },
+              {
+                key: "actual",
+                label: "Actual",
+                accessor: log => log.actualCost,
+                render: log => <span className="text-xs text-charcoal font-medium">{formatCurrencyDec(log.actualCost)}</span>,
+                className: "text-right",
+                headerClassName: "text-right",
+              },
+              {
+                key: "labor",
+                label: "Labor",
+                accessor: log => log.laborCost,
+                render: log => <span className="text-xs text-warm-gray">{formatCurrencyDec(log.laborCost)}</span>,
+                className: "text-right",
+                headerClassName: "text-right",
+                responsiveClass: "hidden lg:table-cell",
+              },
+              {
+                key: "materials",
+                label: "Materials",
+                accessor: log => log.materialsCost,
+                render: log => <span className="text-xs text-warm-gray">{formatCurrencyDec(log.materialsCost)}</span>,
+                className: "text-right",
+                headerClassName: "text-right",
+                responsiveClass: "hidden lg:table-cell",
+              },
+            ] satisfies DataTableColumn<MaintenanceLogRecord>[]}
+            rows={logs.filter(l => (l.estimatedCost || l.actualCost || l.cost) > 0)}
+            rowKey={log => log.id}
+            filters={[
+              { key: "status", label: "Status", options: STATUSES.map(s => ({ value: s, label: statusLabel(s) })), match: (log, v) => log.status === v },
+            ] satisfies DataTableFilter<MaintenanceLogRecord>[]}
+            searchPlaceholder="Search costs..."
+            onRowClick={openLog}
+            defaultPageSize={25}
+            defaultSort={{ key: "actual", dir: "desc" }}
+            emptyMessage="No maintenance costs recorded."
+          />
         </>
       )}
 
@@ -1134,6 +1257,7 @@ export default function MaintenanceLogPage() {
             <div className="p-4">
               {/* Quick Actions */}
               <div className="flex flex-wrap gap-2 mb-6">
+                <button onClick={() => editingLog ? setEditingLog(false) : startEditLog(selectedLog)} className={`text-[10px] tracking-[0.15em] uppercase font-medium transition px-3 py-2 flex items-center gap-1.5 border ${editingLog ? "bg-charcoal text-white border-charcoal" : "bg-white text-charcoal border-light-gray hover:bg-cream"}`}><Edit3 size={11} /> {editingLog ? "Close Editor" : "Edit"}</button>
                 {selectedLog.status !== "completed" && (
                   <>
                     {selectedLog.status === "new" && (
@@ -1148,8 +1272,85 @@ export default function MaintenanceLogPage() {
                 )}
               </div>
 
+              {/* Edit Form */}
+              {editingLog && (
+                <div className="bg-white border border-charcoal/20 p-4 mb-6 space-y-4">
+                  <h3 className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Edit Maintenance Log</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="sm:col-span-2">
+                      <label className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block mb-1">Issue Title</label>
+                      <input value={editLogForm.issueTitle} onChange={e => setEditLogForm(p => ({ ...p, issueTitle: e.target.value }))} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none focus:border-charcoal/40" />
+                    </div>
+                    <div>
+                      <label className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block mb-1">Category</label>
+                      <select value={editLogForm.category} onChange={e => setEditLogForm(p => ({ ...p, category: e.target.value }))} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none focus:border-charcoal/40 bg-white">
+                        {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block mb-1">Priority</label>
+                      <select value={editLogForm.priority} onChange={e => setEditLogForm(p => ({ ...p, priority: e.target.value }))} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none focus:border-charcoal/40 bg-white">
+                        {PRIORITIES.map(p2 => <option key={p2} value={p2}>{p2.charAt(0).toUpperCase() + p2.slice(1)}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block mb-1">Status</label>
+                      <select value={editLogForm.status} onChange={e => setEditLogForm(p => ({ ...p, status: e.target.value }))} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none focus:border-charcoal/40 bg-white">
+                        {STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block mb-1">Reported By</label>
+                      <input value={editLogForm.reportedBy} onChange={e => setEditLogForm(p => ({ ...p, reportedBy: e.target.value }))} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none focus:border-charcoal/40" />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block mb-1">Description</label>
+                      <textarea value={editLogForm.description} onChange={e => setEditLogForm(p => ({ ...p, description: e.target.value }))} rows={3} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none focus:border-charcoal/40 resize-none" />
+                    </div>
+                    <div>
+                      <label className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block mb-1">Vendor / Assignee</label>
+                      <select value={editLogForm.vendorId} onChange={e => setEditLogForm(p => ({ ...p, vendorId: e.target.value }))} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none focus:border-charcoal/40 bg-white">
+                        <option value="">No vendor assigned</option>
+                        {vendors.map(v => <option key={v.id} value={v.id}>{v.vendorName}</option>)}
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block mb-1">Scheduled</label>
+                        <input type="date" value={editLogForm.scheduledDate} onChange={e => setEditLogForm(p => ({ ...p, scheduledDate: e.target.value }))} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none focus:border-charcoal/40" />
+                      </div>
+                      <div>
+                        <label className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block mb-1">Due Date</label>
+                        <input type="date" value={editLogForm.dueDate} onChange={e => setEditLogForm(p => ({ ...p, dueDate: e.target.value }))} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none focus:border-charcoal/40" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:col-span-2">
+                      {([
+                        ["estimatedCost", "Estimated ($)"],
+                        ["actualCost", "Actual ($)"],
+                        ["laborCost", "Labor ($)"],
+                        ["materialsCost", "Materials ($)"],
+                      ] as const).map(([field, label]) => (
+                        <div key={field}>
+                          <label className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block mb-1">{label}</label>
+                          <input type="number" min={0} step="0.01" value={editLogForm[field] || ""} onChange={e => setEditLogForm(p => ({ ...p, [field]: Number(e.target.value) }))} placeholder="0.00" className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none focus:border-charcoal/40" />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block mb-1">Notes</label>
+                      <textarea value={editLogForm.notes} onChange={e => setEditLogForm(p => ({ ...p, notes: e.target.value }))} rows={2} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none focus:border-charcoal/40 resize-none" />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={saveEditLog} disabled={saving} className="bg-charcoal text-white text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-stone transition px-4 py-2.5 disabled:opacity-50">{saving ? "Saving..." : "Save Changes"}</button>
+                    <button onClick={() => setEditingLog(false)} className="border border-light-gray text-charcoal text-[10px] tracking-[0.15em] uppercase font-medium hover:bg-cream transition px-4 py-2.5">Cancel</button>
+                  </div>
+                </div>
+              )}
+
               {/* Overview Tab */}
-              {drawerTab === "overview" && (
+              {drawerTab === "overview" && !editingLog && (
                 <div className="space-y-4">
                   <div className="bg-cream/50 border border-light-gray p-4 space-y-3">
                     <h3 className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium">Details</h3>
@@ -1340,7 +1541,7 @@ export default function MaintenanceLogPage() {
               </div>
               <div>
                 <label className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block mb-1">Estimated Cost ($)</label>
-                <input type="number" min={0} step="0.01" value={newLog.estimatedCost} onChange={e => setNewLog(p => ({ ...p, estimatedCost: Number(e.target.value) }))} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none focus:border-charcoal/40" />
+                <input type="number" min={0} step="0.01" value={newLog.estimatedCost || ""} onChange={e => setNewLog(p => ({ ...p, estimatedCost: Number(e.target.value) }))} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none focus:border-charcoal/40" placeholder="0.00" />
               </div>
               <div>
                 <label className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block mb-1">Notes</label>
@@ -1413,7 +1614,7 @@ export default function MaintenanceLogPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block mb-1">Estimated Cost ($)</label>
-                  <input type="number" min={0} step="0.01" value={newRecurring.estimatedCost} onChange={e => setNewRecurring(p => ({ ...p, estimatedCost: Number(e.target.value) }))} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none focus:border-charcoal/40" />
+                  <input type="number" min={0} step="0.01" value={newRecurring.estimatedCost || ""} onChange={e => setNewRecurring(p => ({ ...p, estimatedCost: Number(e.target.value) }))} className="w-full border border-light-gray text-charcoal text-xs px-3 py-2.5 outline-none focus:border-charcoal/40" placeholder="0.00" />
                 </div>
                 <div>
                   <label className="text-[9px] tracking-[0.15em] uppercase text-warm-gray font-medium block mb-1">Reminder (days before)</label>

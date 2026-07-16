@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useCallback } from "react";
 import { Check } from "lucide-react";
@@ -120,7 +120,7 @@ export default function BookingRulesTab({ listingId }: BookingRulesTabProps) {
       {/* Booking Mode */}
       <Card>
         <h2 className={sectionHeader}>Booking Mode</h2>
-        <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           <SelectInput
             label="Default Booking Mode"
             value={rules.bookingMode}

@@ -329,9 +329,9 @@ function SalesManagerPageInner() {
           Loading configuration...
         </div>
       ) : (
-        <div className="flex gap-6 items-start">
+        <div className="flex flex-col lg:flex-row gap-6 items-start">
           {/* Main Content */}
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 w-full">
             {activeTab === "pricing" && (
               <>
                 <PricingTab
@@ -408,7 +408,7 @@ function SalesManagerPageInner() {
 
           {/* Price Preview Sidebar */}
           {showPreview && (
-            <div className="w-72 shrink-0 sticky top-6">
+            <div className="w-full lg:w-72 shrink-0 lg:sticky lg:top-6">
               <PricePreview
                 form={pricingForm}
                 addOns={addOns}

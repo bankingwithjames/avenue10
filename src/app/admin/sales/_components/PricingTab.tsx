@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { NumberInput, TextInput, RadioGroup, Toggle, Card, sectionHeader } from "./shared";
 
@@ -72,7 +72,7 @@ export default function PricingTab({
       {/* Board Rate & Accommodations */}
       <Card>
         <h2 className={sectionHeader}>Board Rate & Accommodations</h2>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <NumberInput
             label="Base Nightly Rate"
             value={form.boardRate}
@@ -142,7 +142,7 @@ export default function PricingTab({
       {/* Stay Rules */}
       <Card>
         <h2 className={sectionHeader}>Stay Rules</h2>
-        <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           <NumberInput
             label="Minimum Stay (nights)"
             value={form.minimumStay}
@@ -170,7 +170,7 @@ export default function PricingTab({
       {/* Taxes */}
       <Card>
         <h2 className={sectionHeader}>Taxes</h2>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <NumberInput
             label="Tax Rate"
             value={form.taxRate}
@@ -199,7 +199,7 @@ export default function PricingTab({
             value={serviceFeeType}
             onChange={(v) => setServiceFeeType(v as "percent" | "flat")}
           />
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {serviceFeeType === "percent" ? (
               <NumberInput
                 label="Service Fee Percentage"
@@ -238,7 +238,7 @@ export default function PricingTab({
             value={depositType}
             onChange={(v) => setDepositType(v as "percent" | "flat")}
           />
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {depositType === "percent" ? (
               <NumberInput
                 label="Deposit Percentage"

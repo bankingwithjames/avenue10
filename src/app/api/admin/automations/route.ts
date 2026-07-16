@@ -8,7 +8,7 @@ export async function GET() {
 
   try {
     const automations = await prisma.crmAutomation.findMany({
-      orderBy: { createdAt: "desc" },
+      orderBy: { sortOrder: "asc" },
     });
 
     return NextResponse.json(automations);
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
   if (error) return error;
 
   try {
-    const { name, trigger, templateId, delay, isActive, conditions } =
+    const { name, trigger, templateId, delay, isActive, conditions, sortOrder } =
       await req.json();
 
     if (!name || !trigger) {
@@ -30,6 +30,12 @@ export async function POST(req: NextRequest) {
         { error: "name and trigger are required" },
         { status: 400 }
       );
+    }
+
+    let order = sortOrder;
+    if (order === undefined) {
+      const maxRow = await prisma.crmAutomation.findFirst({ orderBy: { sortOrder: "desc" } });
+      order = (maxRow?.sortOrder ?? -1) + 1;
     }
 
     const automation = await prisma.crmAutomation.create({
@@ -40,6 +46,7 @@ export async function POST(req: NextRequest) {
         delay,
         isActive,
         conditions,
+        sortOrder: order,
       },
     });
 

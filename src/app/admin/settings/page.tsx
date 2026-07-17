@@ -51,6 +51,7 @@ function useLocalStorage<T>(key: string, initial: T): [T, React.Dispatch<React.S
   useEffect(() => {
     try {
       const raw = localStorage.getItem(key);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- client-only localStorage hydration on mount; intended side effect
       if (raw) setData(JSON.parse(raw));
     } catch {}
   }, [key]);

@@ -488,16 +488,21 @@ export default function GuestsCRMPage() {
     setLoading(false);
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- data-fetch effect; intended side effect, not a derived-state cascade
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  // Reset drawer-local campaign state whenever the builder opens
-  useEffect(() => {
+  // Reset drawer-local campaign state whenever the builder opens. Done during render
+  // via React's "adjust state when a value changes" pattern rather than an effect, so
+  // the reset applies before paint without an extra render pass.
+  const [prevBuilderOpen, setPrevBuilderOpen] = useState(showCampaignBuilder);
+  if (showCampaignBuilder !== prevBuilderOpen) {
+    setPrevBuilderOpen(showCampaignBuilder);
     if (showCampaignBuilder) {
       setRecipientMode("segment");
       setRecipientGuestId("");
       setBuilderTemplateId("");
     }
-  }, [showCampaignBuilder]);
+  }
 
   // ── Sync Guests from Reservations ──
   const syncGuests = async () => {

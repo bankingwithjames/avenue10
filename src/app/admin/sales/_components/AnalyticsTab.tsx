@@ -70,6 +70,7 @@ export default function AnalyticsTab({ listingId }: AnalyticsTabProps) {
   }, [listingId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- data-fetch effect; intended side effect, not a derived-state cascade
     loadData();
   }, [loadData]);
 

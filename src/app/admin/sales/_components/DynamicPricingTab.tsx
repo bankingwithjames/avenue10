@@ -290,6 +290,7 @@ export default function DynamicPricingTab({
     setLoadingRates(false);
   }, [listingId, calendarMonth]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- data-fetch effect; intended side effect, not a derived-state cascade
   useEffect(() => { loadDailyRates(); }, [loadDailyRates]);
 
   const saveRuleSettings = async (ruleType: string, data: object) => {

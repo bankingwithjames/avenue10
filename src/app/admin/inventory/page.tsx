@@ -309,6 +309,7 @@ export default function InventoryManagementPage() {
     setLoading(false);
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- data-fetch effect; intended side effect, not a derived-state cascade
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   // ── Active (non-archived) Items ──

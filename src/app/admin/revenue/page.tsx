@@ -693,10 +693,18 @@ function DynamicPricingTab({ listings, selectedListing, onListingsUpdate }: {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
-  useEffect(() => {
+  // When the selected listing (or its base rate) changes, resync the editable rate
+  // field and clear any stale save message. Done during render via React's "adjust
+  // state when a value changes" pattern instead of an effect. The key includes the
+  // listing id, so the message still clears when switching between two listings that
+  // happen to share the same base rate.
+  const rateSyncKey = `${selectedListing}|${currentBaseRate}`;
+  const [prevRateSyncKey, setPrevRateSyncKey] = useState(rateSyncKey);
+  if (rateSyncKey !== prevRateSyncKey) {
+    setPrevRateSyncKey(rateSyncKey);
     setEditRate(String(currentBaseRate));
     setSaveMsg(null);
-  }, [currentBaseRate, selectedListing]);
+  }
 
   async function handleSaveRate() {
     if (!activeListing) return;

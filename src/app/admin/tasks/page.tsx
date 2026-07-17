@@ -92,6 +92,7 @@ export default function TasksPage() {
   });
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- client-only localStorage hydration + data-fetch on mount; intended side effect
     setTasks(loadTasks());
     fetch("/api/admin/listings")
       .then((r) => {

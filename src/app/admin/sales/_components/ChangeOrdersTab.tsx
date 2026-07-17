@@ -72,6 +72,7 @@ export default function ChangeOrdersTab({ listingId }: ChangeOrdersTabProps) {
   }, [listingId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- data-fetch effect; intended side effect, not a derived-state cascade
     loadOrders();
   }, [loadOrders]);
 

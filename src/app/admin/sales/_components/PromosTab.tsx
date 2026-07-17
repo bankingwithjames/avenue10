@@ -67,6 +67,7 @@ export default function PromosTab({ listings }: PromosTabProps) {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- data-fetch effect; intended side effect, not a derived-state cascade
     loadPromos();
   }, [loadPromos]);
 

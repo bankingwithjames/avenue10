@@ -239,6 +239,7 @@ export default function AdminMediaPage() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- data-fetch + client-only localStorage hydration on mount; intended side effect
     loadMedia();
     loadListings();
     loadPageMedia();
